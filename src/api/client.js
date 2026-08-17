@@ -42,9 +42,11 @@ async function request(path, options = {}) {
 
   const data = await res.json().catch(() => null)
 
+  const isAuthEndpoint = path.startsWith('/auth/login') || path.startsWith('/auth/verify-mfa')
+
   if (res.status === 401) {
     _logSecEvent('unauthorized', path, 401, data?.detail || 'Token rejected or session expired');
-    if (localStorage.getItem('admin_token')) {
+    if (!isAuthEndpoint && localStorage.getItem('admin_token')) {
       localStorage.removeItem('admin_token')
       localStorage.removeItem('admin_profile')
       window.location.href = LOGIN_PATH
@@ -84,6 +86,7 @@ async function login(email, password) {
   }
   localStorage.setItem('admin_token', data.token)
   localStorage.setItem('admin_profile', JSON.stringify(data.profile))
+  window.dispatchEvent(new Event('auth-changed'))
   return data
 }
 
@@ -98,12 +101,14 @@ async function verifyMfa(mfaToken, code) {
   }
   localStorage.setItem('admin_token', data.token)
   localStorage.setItem('admin_profile', JSON.stringify(data.profile))
+  window.dispatchEvent(new Event('auth-changed'))
   return data
 }
 
 function logout() {
   localStorage.removeItem('admin_token')
   localStorage.removeItem('admin_profile')
+  window.dispatchEvent(new Event('auth-changed'))
 }
 
 function getProfile() {

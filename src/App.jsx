@@ -1,4 +1,4 @@
-import { lazy } from 'react'
+import { lazy, useState, useEffect } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import MainLayout from './layout/MainLayout'
 import RequireAuth from './components/RequireAuth'
@@ -47,8 +47,19 @@ import { SandboxProvider } from './pages/developer/sandbox/SandboxContext'
 import SampleDemoTab from './pages/developer/sandbox/SampleDemoTab'
 
 export default function App() {
+  const [token, setToken] = useState(() => localStorage.getItem('admin_token'));
+
+  useEffect(() => {
+    const sync = () => setToken(localStorage.getItem('admin_token'));
+    window.addEventListener('auth-changed', sync);
+    window.addEventListener('storage', sync);
+    return () => {
+      window.removeEventListener('auth-changed', sync);
+      window.removeEventListener('storage', sync);
+    };
+  }, []);
+
   const profile = api.getProfile();
-  const token = localStorage.getItem('admin_token');
   const isExperimental = profile?.email === 'experimental@gmail.com';
 
   return (
