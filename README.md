@@ -7,8 +7,8 @@ A React + Vite admin dashboard for the Performance Based Appraisal System (PBAS)
 ## Features
 
 - **Decoupled Architecture:** Runs as a standalone Single Page Application (SPA).
-- **Multi-Module Support:** Can point to different backend API servers using environment variables.
-- **Configurable Paths:** Custom routing basename and public asset paths.
+- **Multi-Module Support:** Can point to different backend API servers using runtime environment variables.
+- **Runtime Environment Injection:** Supports simple Docker builds and loads environment variables dynamically at container runtime using Nginx configuration injection.
 - **Pre-built API Client:** Standardized, central API calls with automatic token attachments and security logging.
 
 ---
@@ -38,54 +38,44 @@ Start the Vite development server:
 npm run dev
 ```
 
-Open `http://localhost:5174/panel/` (or whatever path you set in `VITE_ROUTER_BASENAME`) in your browser.
+Open `http://localhost:5174/panel/` in your browser.
 
 ---
 
 ## Environment Variables (.env)
 
-The application uses the following environment variables:
+The application uses the following environment variables (both in `.env` files for development, and at container runtime for Docker):
 
 | Variable | Description | Example / Default |
 |---|---|---|
-| `VITE_BACKEND_URL` | Staging/development backend URL used by the local Vite dev proxy to avoid CORS issues during dev. | `https://api.staging.com` |
-| `VITE_APP_BASE_PATH` | The public base path for Vite build assets (must start and end with `/`). | `/panel/` or `/` |
-| `VITE_ROUTER_BASENAME` | The basename for React Router. Matches the path under which the app is served. | `/panel` or `/` |
-| `VITE_API_BASE_URL` | The backend API prefix. Use `/api/v1` if served on same origin, or absolute URL for standalone deployment. | `/api/v1` or `https://api.yourdomain.com/api/v1` |
+| `VITE_BACKEND_URL` | *(Development Only)* Vite dev proxy target to route local `/api` calls. | `http://localhost:8002` |
+| `VITE_ROUTER_BASENAME` | React Router basename (path under which the UI is hosted). | `/panel` or `/` |
+| `VITE_API_BASE_URL` | Backend API prefix. Absolute URL for standalone deployments or relative `/api/v1` for same-origin. | `/api/v1` or `http://localhost:8002/api/v1` |
 
 ---
 
-## Development vs Standalone Standalone Deployment Modes
+## Docker Deployment (Using `--env-file`)
 
-This admin UI supports two primary deployment strategies:
+With our runtime configuration injection pattern, you do not need long build commands with build-args. You can build a generic image once and run it with different environment configurations.
 
-### Option A: Served from the Backend (Same-Origin)
-Suitable when the backend FastAPI (or similar) server acts as a reverse proxy, hosting the built static files under a subpath (e.g., `/panel`).
-- **`.env` Configuration:**
-  ```env
-  VITE_APP_BASE_PATH=/panel/
-  VITE_ROUTER_BASENAME=/panel
-  VITE_API_BASE_URL=/api/v1
-  ```
-- **Deployment:**
-  1. Build the app using `npm run build`.
-  2. Copy the contents of the `dist/` directory to the backend static assets directory (e.g., `/static/panel` or wherever the backend router serves panel files).
+### 1. Build the Docker Image
+Run a simple Docker build command:
+```bash
+docker build -t pbas-admin .
+```
 
-### Option B: Standalone SPA Deployment (Recommended for Multi-Module)
-Suitable when deploying to static hosting services like **Netlify**, **Vercel**, **Cloudflare Pages**, or **Firebase Hosting**.
-- **`.env` Configuration:**
-  ```env
-  VITE_APP_BASE_PATH=/
-  VITE_ROUTER_BASENAME=/
-  VITE_API_BASE_URL=https://your-backend-api.com/api/v1
-  ```
-- **Deployment:**
-  1. Set up your static hosting provider to point to this repository.
-  2. Configure build settings:
-     - **Build Command:** `npm run build`
-     - **Output Directory:** `dist`
-  3. Set up the environment variables (`VITE_APP_BASE_PATH`, `VITE_ROUTER_BASENAME`, `VITE_API_BASE_URL`) in the hosting provider's dashboard.
-  4. **SPA Routing Redirect Rule:** Add redirect configurations (e.g., `_redirects` for Netlify, `vercel.json` for Vercel) to rewrite all requests back to `/index.html` to support React Router client-side routing.
+### 2. Run the Container using an Env File
+To run the container, use the `--env-file` parameter to pass your configuration (e.g., `.env.test` for testing, `.env` for development, or a production environment file):
+
+```bash
+docker run -d \
+  --name pbas-admin-test \
+  --env-file .env.test \
+  -p 8080:8080 \
+  pbas-admin
+```
+
+This runs Nginx on port `8080` and dynamically generates a `config.js` file with the environment variables from `.env.test`.
 
 ---
 
@@ -94,31 +84,14 @@ Suitable when deploying to static hosting services like **Netlify**, **Vercel**,
 ```
 pbas_admin/
 ├── index.html
-├── vite.config.js       ← Configured to read environment variables
+├── vite.config.js       ← Standard Vite configuration
 ├── package.json
-├── .env.example
+├── docker-entrypoint.sh ← Startup script that writes env variables into config.js
+├── public/
+│   └── config.js        ← Static config placeholder, dynamic in production
 ├── src/
-│   ├── main.jsx         ← Router basename read dynamically from VITE_ROUTER_BASENAME
+│   ├── main.jsx         ← Reads basename dynamically from window.APP_CONFIG
 │   ├── App.jsx          ← Router configurations
 │   ├── api/
-│   │   └── client.js    ← API client using dynamic VITE_API_BASE_URL & LOGIN_PATH
-│   ├── layouts/
-│   │   └── AdminLayout.jsx
-│   └── pages/           ← UI Page components
-```
-
----
-
-## Making API Calls
-
-All API calls must be routed through `src/api/client.js`. Import and call methods from the `api` object:
-
-```js
-import { api } from '../api/client'
-
-// Login (enforces admin/super_admin role)
-await api.login(email, password)
-
-// List users filterable by school, role, or search
-await api.users.list({ school: 'SoCSEA', role: 'faculty' })
+│   │   └── client.js    ← Reads API base URL dynamically from window.APP_CONFIG
 ```

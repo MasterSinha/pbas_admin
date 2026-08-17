@@ -5,8 +5,11 @@ import './styles/global'
 import App from './App'
 import { ThemeProvider } from './context/ThemeContext'
 
-const BASENAME = import.meta.env.VITE_ROUTER_BASENAME !== undefined ? import.meta.env.VITE_ROUTER_BASENAME : '/panel'
+const BASENAME = (window.APP_CONFIG && window.APP_CONFIG.VITE_ROUTER_BASENAME !== undefined)
+  ? window.APP_CONFIG.VITE_ROUTER_BASENAME
+  : (import.meta.env.VITE_ROUTER_BASENAME !== undefined ? import.meta.env.VITE_ROUTER_BASENAME : '/panel')
 const LOGIN_PATH = BASENAME === '/' ? '/login' : `${BASENAME}/login`
+
 
 
 // ── Anti-tamper guards ─────────────────────────────────────────────────────────
