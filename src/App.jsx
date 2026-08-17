@@ -48,66 +48,76 @@ import SampleDemoTab from './pages/developer/sandbox/SampleDemoTab'
 
 export default function App() {
   const profile = api.getProfile();
+  const token = localStorage.getItem('admin_token');
   const isExperimental = profile?.email === 'experimental@gmail.com';
 
   return (
     <Routes>
-      <Route path="/login" element={<Login />} />
-
-      <Route element={<RequireAuth />}>
-        {isExperimental && (
-          <Route path="developer/sandbox/sample-demo" element={
-            <SandboxProvider>
-              <SampleDemoTab />
-            </SandboxProvider>
-          } />
-        )}
-        {/* MainLayout contains the Suspense boundary for all lazy pages */}
-        <Route path="/" element={<MainLayout />}>
-          <Route index                      element={<OverviewPage />}         />
-          <Route path="cycle"               element={<AppraisalCyclePage />}   />
-
-          <Route path="faculty"             element={<FacultyListPage />}      />
-          <Route path="faculty/add"         element={<AddFacultyPage />}       />
-
-          <Route path="appraisal/window"    element={<SubmissionWindowPage />} />
-          <Route path="appraisal/status"    element={<SubmissionStatusPage />} />
-
-          <Route path="tracking/submitted"  element={<SubmittedFacultyPage />} />
-          <Route path="tracking/pending"    element={<PendingFacultyPage />}   />
-          <Route path="tracking/schools"    element={<SchoolStatisticsPage />} />
-
-          <Route path="credentials/reset"   element={<CredentialDetailsPage />} />
-
-          <Route path="workflow/designations" element={<DesignationsPage />}      />
-          <Route path="workflow/templates"    element={<WorkflowTemplatesPage />} />
-
-          <Route path="analytics"           element={<Navigate to="/" replace />} />
-
-          <Route path="feedback"            element={<FeedbackPage />}         />
-          <Route path="announcements"       element={<AnnouncementsPage />}    />
-
-          <Route path="settings"            element={<SettingsPage />}         />
-          <Route path="settings/security"   element={<SecurityPage />}         />
+      {!token ? (
+        <>
+          <Route path="/" element={<Login />} />
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </>
+      ) : (
+        <>
+          <Route path="/login" element={<Navigate to="/" replace />} />
           
-          <Route path="developer/migrate"   element={<MigrateBucketPage />}    />
-          <Route path="developer/backup"    element={<BackupPage />}           />
-          <Route path="developer/transition" element={<TransitionPage />}      />
-          {isExperimental && (
-            <Route path="developer/sandbox/:tab?" element={<ExperimentalSandboxPage />} />
-          )}
+          <Route element={<RequireAuth />}>
+            {isExperimental && (
+              <Route path="developer/sandbox/sample-demo" element={
+                <SandboxProvider>
+                  <SampleDemoTab />
+                </SandboxProvider>
+              } />
+            )}
+            {/* MainLayout contains the Suspense boundary for all lazy pages */}
+            <Route path="/" element={<MainLayout />}>
+              <Route index                      element={<OverviewPage />}         />
+              <Route path="cycle"               element={<AppraisalCyclePage />}   />
 
-          <Route path="marks"               element={<FacultyMarksPage />}     />
-          <Route path="marks/pending"       element={<PendingReviewsPage />}   />
+              <Route path="faculty"             element={<FacultyListPage />}      />
+              <Route path="faculty/add"         element={<AddFacultyPage />}       />
 
-          <Route path="export"              element={<ExportReportPage />}     />
-          <Route path="profile"             element={<EditProfilePage />}      />
-          <Route path="history"             element={<HistoryPage />}          />
-          <Route path="monitoring"          element={<MonitoringPage />}       />
+              <Route path="appraisal/window"    element={<SubmissionWindowPage />} />
+              <Route path="appraisal/status"    element={<SubmissionStatusPage />} />
 
-          <Route path="*"                   element={<Navigate to="/" replace />} />
-        </Route>
-      </Route>
+              <Route path="tracking/submitted"  element={<SubmittedFacultyPage />} />
+              <Route path="tracking/pending"    element={<PendingFacultyPage />}   />
+              <Route path="tracking/schools"    element={<SchoolStatisticsPage />} />
+
+              <Route path="credentials/reset"   element={<CredentialDetailsPage />} />
+
+              <Route path="workflow/designations" element={<DesignationsPage />}      />
+              <Route path="workflow/templates"    element={<WorkflowTemplatesPage />} />
+
+              <Route path="analytics"           element={<Navigate to="/" replace />} />
+
+              <Route path="feedback"            element={<FeedbackPage />}         />
+              <Route path="announcements"       element={<AnnouncementsPage />}    />
+
+              <Route path="settings"            element={<SettingsPage />}         />
+              <Route path="settings/security"   element={<SecurityPage />}         />
+              
+              <Route path="developer/migrate"   element={<MigrateBucketPage />}    />
+              <Route path="developer/backup"    element={<BackupPage />}           />
+              <Route path="developer/transition" element={<TransitionPage />}      />
+              {isExperimental && (
+                <Route path="developer/sandbox/:tab?" element={<ExperimentalSandboxPage />} />
+              )}
+
+              <Route path="marks"               element={<FacultyMarksPage />}     />
+              <Route path="marks/pending"       element={<PendingReviewsPage />}   />
+
+              <Route path="export"              element={<ExportReportPage />}     />
+              <Route path="profile"             element={<EditProfilePage />}      />
+              <Route path="history"             element={<HistoryPage />}          />
+              <Route path="monitoring"          element={<MonitoringPage />}       />
+
+              <Route path="*"                   element={<Navigate to="/" replace />} />
+            </Route>
+          </Route>
+        </>
+      )}
     </Routes>
   )
 }

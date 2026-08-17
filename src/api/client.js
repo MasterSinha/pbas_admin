@@ -4,7 +4,7 @@ const BASE = (window.APP_CONFIG && window.APP_CONFIG.VITE_API_BASE_URL)
 const BASENAME = (window.APP_CONFIG && window.APP_CONFIG.VITE_ROUTER_BASENAME !== undefined)
   ? window.APP_CONFIG.VITE_ROUTER_BASENAME
   : (import.meta.env.VITE_ROUTER_BASENAME !== undefined ? import.meta.env.VITE_ROUTER_BASENAME : '/panel')
-const LOGIN_PATH = BASENAME === '/' ? '/login' : `${BASENAME}/login`
+const LOGIN_PATH = BASENAME
 
 
 
