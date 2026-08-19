@@ -394,6 +394,7 @@ async function downloadFileWithProgress(path, onProgress) {
 
 const developer = {
   migrateUrls: (old_pattern) => request(`/admin/migrate-urls?old_pattern=${encodeURIComponent(old_pattern)}`, { method: 'POST' }),
+  cleanVcRemarks: () => request('/admin/clean-vc-remarks', { method: 'POST' }),
   backupDb: (onProgress) => downloadFileWithProgress('/admin/backup/db', onProgress),
   backupUploads: (onProgress) => downloadFileWithProgress('/admin/backup/uploads', onProgress),
   restoreDb: (file, onProgress) => {

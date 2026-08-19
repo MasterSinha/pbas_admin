@@ -61,7 +61,7 @@ export const NAV = [
     children: [
       { label: "System Settings", icon: I.monitor, path: "/settings"          },
       { label: "Security",        icon: I.lock,    path: "/settings/security" },
-      { label: "Migrate Bucket URLs", icon: I.refresh, path: "/developer/migrate" },
+      { label: "Database Utilities", icon: I.refresh, path: "/developer/migrate" },
       { label: "Backup & Restore",     icon: I.dl,      path: "/developer/backup" },
       { label: "Delete Academic Years", icon: I.trash, path: "/developer/transition" },
     ],
