@@ -21,6 +21,13 @@ function toDateInput(iso) {
   return new Date(iso).toISOString().slice(0, 16);
 }
 
+function getApiUrl(path) {
+  const base = (window.APP_CONFIG && window.APP_CONFIG.VITE_API_BASE_URL)
+    ? window.APP_CONFIG.VITE_API_BASE_URL
+    : (import.meta.env.VITE_API_BASE_URL || '/api/v1');
+  return `${base}${path}`;
+}
+
 export default function SubmissionWindowPage() {
   const [tick, setTick] = useState(0);
   const { data: configs, loading, error } = useFetch(() => api.cycle.list(), [tick]);
@@ -153,7 +160,7 @@ export default function SubmissionWindowPage() {
 
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch('/api/v1/admin/transition/switch', {
+      const response = await fetch(getApiUrl('/admin/transition/switch'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -223,7 +230,7 @@ export default function SubmissionWindowPage() {
     
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch('/api/v1/admin/transition/puzzle', {
+      const response = await fetch(getApiUrl('/admin/transition/puzzle'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -261,7 +268,7 @@ export default function SubmissionWindowPage() {
 
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch('/api/v1/admin/transition/revert', {
+      const response = await fetch(getApiUrl('/admin/transition/revert'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
