@@ -149,6 +149,7 @@ function EditDrawer({ user: f, onClose, onSaved }) {
   const isSuperAdmin = profile?.appraisal_role === 'super_admin';
   const isNT = f.role === 'non_teaching_staff';
   const [form, setForm]   = useState({
+    email:                   f.email,
     full_name:               f.name === f.email ? '' : f.name,
     department:              f.dept === '—' ? '' : f.dept,
     school:                  f.school === '—' ? '' : f.school,
@@ -220,6 +221,14 @@ function EditDrawer({ user: f, onClose, onSaved }) {
         {/* Form */}
         <div style={{ flex: 1, overflowY: 'auto', padding: 20 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            <div>
+              <label style={lbl}>Account Email (Ownership)</label>
+              <input className="ifield" style={inp} placeholder="faculty@university.edu" value={form.email ?? ''} onChange={set('email')} />
+              <div style={{ fontSize: 10, color: '#fb923c', marginTop: 4, lineHeight: 1.4 }}>
+                ⚠️ <strong>Notice:</strong> Changing the email transfers account ownership. The target email <strong>must not</strong> belong to an existing registered user.
+              </div>
+            </div>
+
             {[
               { l: 'Full Name',  k: 'full_name',  placeholder: 'e.g. Dr. Ravi Kumar' },
               { l: 'Phone',      k: 'phone',      placeholder: '+91 98...' },
