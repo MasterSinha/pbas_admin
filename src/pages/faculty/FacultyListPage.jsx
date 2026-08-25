@@ -335,7 +335,7 @@ function resolveTemplateName(f, assignments, templates) {
 }
 
 // ── User row ───────────────────────────────────────────────────────────────────
-const UserRow = memo(function UserRow({ f, selected, onSelect, onEdit, onToggle, onDelete, verifying, removing, templateName, emailToName }) {
+const UserRow = memo(function UserRow({ f, selected, onSelect, onEdit, onToggle, onResetProgress, onDelete, verifying, removing, templateName, emailToName }) {
   const [hover, setHover] = useState(false);
   const rm       = roleMeta(f.role);
   const isActive = f.status === 'Active';
@@ -347,7 +347,7 @@ const UserRow = memo(function UserRow({ f, selected, onSelect, onEdit, onToggle,
       onMouseLeave={() => setHover(false)}
       style={{
         display: 'grid',
-        gridTemplateColumns: '44px 48px 1fr 150px 155px 105px 114px',
+        gridTemplateColumns: '44px 48px 1fr 120px 155px 95px 145px',
         alignItems: 'center',
         padding: '0 4px',
         borderRadius: 10,
@@ -437,6 +437,7 @@ const UserRow = memo(function UserRow({ f, selected, onSelect, onEdit, onToggle,
 
       {/* Actions */}
       <div style={{ display: 'flex', gap: 5, alignItems: 'center' }}>
+        <IconBtn icon={I.refresh} label="Reset appraisal progress" color={C.yellow} onClick={onResetProgress} />
         <IconBtn icon={I.edit}  label="Edit user"   color={C.accent}  onClick={onEdit} />
         <IconBtn
           icon={I.check}
@@ -538,6 +539,22 @@ export default function FacultyListPage() {
       refresh();
     } catch (e) { setRemoveErr(e.message); }
     finally { setRemovingEmail(null); }
+  };
+
+  const handleResetProgress = async (f) => {
+    const year = window.prompt(`Enter the academic year to reset progress for ${f.name} (e.g., 2025-2026):`);
+    if (!year) return;
+    const confirm = window.confirm(`Are you sure you want to reset all submission and reviewer progress for ${f.name} in academic year ${year}? This cannot be undone.`);
+    if (!confirm) return;
+    
+    try {
+      await api.users.resetProgress(f.email, year);
+      alert(`Successfully reset progress for ${f.name} in ${year}.`);
+      logAction('user_updated', 'User Progress Reset', `${f.name} (${year})`, { name: f.name, email: f.email, year });
+      refresh();
+    } catch (e) {
+      alert(`Error: ${e.message}`);
+    }
   };
 
   const handleBulkRemove = async () => {
@@ -707,7 +724,7 @@ export default function FacultyListPage() {
             {/* Column header */}
             <div style={{
               display: 'grid',
-              gridTemplateColumns: '44px 48px 1fr 150px 155px 105px 114px',
+              gridTemplateColumns: '44px 48px 1fr 120px 155px 95px 145px',
               padding: '8px 4px',
               borderBottom: '1px solid rgba(255,255,255,.06)',
               background: 'rgba(255,255,255,.015)',
@@ -743,6 +760,7 @@ export default function FacultyListPage() {
                   onSelect={() => toggleRow(f.email)}
                   onEdit={() => setEditing(f)}
                   onToggle={() => handleVerify(f, f.status !== 'Active')}
+                  onResetProgress={() => handleResetProgress(f)}
                   onDelete={() => handleRemoveOne(f)}
                   verifying={verifying === f.email}
                   removing={removingEmail === f.email}

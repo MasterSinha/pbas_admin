@@ -126,6 +126,10 @@ const users = {
   remove: (email) => request(`/admin/users/${encodeURIComponent(email)}`, { method: 'DELETE' }),
   reportingOfficers: () => request('/admin/reporting-officers'),
   registrars: () => request('/admin/registrars'),
+  resetProgress: (email, academic_year) => request(`/admin/users/${encodeURIComponent(email)}/reset-progress`, {
+    method: 'POST',
+    body: JSON.stringify({ academic_year })
+  }),
 }
 
 // ---------------------------------------------------------------------------

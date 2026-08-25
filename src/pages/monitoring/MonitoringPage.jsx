@@ -51,6 +51,7 @@ const FAC_CFG = {
   save:       { label: 'Draft Saved',        color: C.yellow,  icon: I.edit    },
   submission: { label: 'Appraisal Submitted', color: C.green,   icon: I.send    },
   review:     { label: 'Form Reviewed',      color: '#a78bfa', icon: I.check   },
+  forgot_password: { label: 'Password Reset Request', color: C.red, icon: I.key },
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -323,7 +324,7 @@ function FacultyTab() {
   const groups = useMemo(() => groupByDate(filtered), [filtered]);
 
   const counts = useMemo(() => {
-    const m = { login: 0, save: 0, submission: 0, review: 0 };
+    const m = { login: 0, save: 0, submission: 0, review: 0, forgot_password: 0 };
     for (const e of logs) if (e.type in m) m[e.type]++;
     return m;
   }, [logs]);
