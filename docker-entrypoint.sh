@@ -7,6 +7,7 @@ VITE_ROUTER_BASENAME=${VITE_ROUTER_BASENAME:-"/panel"}
 
 # Find any config.js in Nginx webroot and replace it with environment values
 CONFIG_PATH="/usr/share/nginx/html/panel/config.js"
+mkdir -p /usr/share/nginx/html/panel
 
 echo "Injecting runtime configuration to $CONFIG_PATH..."
 cat <<EOF > "$CONFIG_PATH"
