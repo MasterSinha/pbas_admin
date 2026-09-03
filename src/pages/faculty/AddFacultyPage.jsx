@@ -151,6 +151,222 @@ function buildChainLabel(ntDirectVC, ntHasFirstReviewer, ntFirstReviewerType, nt
   return ntRegRequired ? `${first} → Registrar → VC` : `${first} → VC`;
 }
 
+// Plain-language approval-path presets — each maps to the 4 NT toggle flags.
+// The admin picks one card instead of combining toggles in their head.
+const NT_PATH_PRESETS = [
+  {
+    id: 'registrar',
+    title: 'Registrar approves, then VC',
+    desc: 'The usual path — Registrar reviews, then the VC signs off.',
+    chain: ['Staff', 'Registrar', 'VC'],
+    icon: I.shield,
+    tint: '#34d399',
+    recommended: true,
+    flags: { directVC: false, hasFirst: false, regRequired: true },
+  },
+  {
+    id: 'reviewer_registrar',
+    title: 'Reviewer, then Registrar, then VC',
+    desc: 'A Reporting Officer or Department Head checks it first.',
+    chain: ['Staff', 'Reviewer', 'Registrar', 'VC'],
+    icon: I.layers,
+    tint: '#818cf8',
+    flags: { directVC: false, hasFirst: true, regRequired: true },
+  },
+  {
+    id: 'reviewer',
+    title: 'Reviewer checks first, then VC',
+    desc: 'A first-level reviewer checks it, then straight to the VC.',
+    chain: ['Staff', 'Reviewer', 'VC'],
+    icon: I.check,
+    tint: '#fb923c',
+    flags: { directVC: false, hasFirst: true, regRequired: false },
+  },
+  {
+    id: 'direct',
+    title: 'Send straight to the VC',
+    desc: 'Skips every reviewer — goes directly to the VC.',
+    chain: ['Staff', 'VC'],
+    icon: I.send,
+    tint: '#f472b6',
+    flags: { directVC: true, hasFirst: false, regRequired: false },
+  },
+];
+
+function matchNtPreset(ntDirectVC, ntHasFirstReviewer, ntRegRequired) {
+  if (ntDirectVC) return 'direct';
+  if (!ntHasFirstReviewer) return 'registrar';
+  return ntRegRequired ? 'reviewer_registrar' : 'reviewer';
+}
+
+// Approval-path choices for a Reporting Officer's OWN yearly appraisal.
+const RO_PATH_PRESETS = [
+  {
+    id: 'ro_registrar',
+    title: 'Through the Registrar',
+    desc: 'The Registrar reviews the Reporting Officer’s own appraisal, then the VC signs off.',
+    chain: ['Reporting Officer', 'Registrar', 'VC'],
+    icon: I.shield,
+    tint: '#22d3ee',
+    recommended: true,
+    viaRegistrar: true,
+  },
+  {
+    id: 'ro_direct',
+    title: 'Straight to the VC',
+    desc: 'Skips the Registrar — the Reporting Officer’s appraisal goes directly to the VC.',
+    chain: ['Reporting Officer', 'VC'],
+    icon: I.send,
+    tint: '#f472b6',
+    viaRegistrar: false,
+  },
+];
+
+// Node colours shared by every approval-path visual on this page.
+const NT_NODE_COLORS = {
+  'Staff': C.accent,
+  'Reviewer': '#fb923c',
+  'Reporting Officer': '#fb923c',
+  'Dept Head': '#fb923c',
+  'Registrar': '#22d3ee',
+  'VC': '#f472b6',
+};
+
+// A single arrow between two flow nodes.
+function FlowArrow() {
+  return (
+    <svg width="15" height="9" viewBox="0 0 16 10" style={{ margin: '0 2px', flexShrink: 0 }}>
+      <path d="M1 5h10M8 2l4 3-4 3" fill="none" stroke="rgba(148,163,184,.55)"
+        strokeWidth="1.4" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+// Horizontal node → node → node flow diagram.
+function FlowChain({ chain }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 1 }}>
+      {chain.map((node, i) => {
+        const nc = NT_NODE_COLORS[node] ?? C.accent;
+        return (
+          <span key={node + i} style={{ display: 'inline-flex', alignItems: 'center' }}>
+            <span style={{
+              display: 'inline-flex', alignItems: 'center', gap: 4,
+              padding: '2px 8px', borderRadius: 999, fontSize: 9.5, fontWeight: 700,
+              background: `${nc}14`, border: `1px solid ${nc}2e`, color: nc, whiteSpace: 'nowrap',
+            }}>
+              <span style={{ width: 3.5, height: 3.5, borderRadius: '50%', background: nc }} />
+              {node}
+            </span>
+            {i < chain.length - 1 && <FlowArrow />}
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
+// Premium selectable approval-path card. Used by both NT Staff and Reporting Officer.
+function PathCard({ preset, active, onSelect }) {
+  const PIcon = preset.icon;
+  return (
+    <button
+      type="button"
+      onClick={onSelect}
+      className="act-btn card-shimmer"
+      style={{
+        display: 'flex', gap: 12, alignItems: 'flex-start', width: '100%',
+        padding: '13px 14px', borderRadius: 12, textAlign: 'left', cursor: 'pointer',
+        border: `1px solid ${active ? `${preset.tint}66` : 'var(--c-border)'}`,
+        background: active
+          ? `linear-gradient(135deg, ${preset.tint}1f 0%, ${preset.tint}0a 55%, transparent 100%)`
+          : 'var(--c-card)',
+        boxShadow: active
+          ? `0 0 0 1px ${preset.tint}40, 0 10px 26px -10px ${preset.tint}45`
+          : '0 1px 2px rgba(0,0,0,.12)',
+        transition: 'border-color .2s ease, background .2s ease, box-shadow .2s ease',
+        position: 'relative', overflow: 'hidden',
+      }}
+    >
+      <span style={{
+        position: 'absolute', left: 0, top: 10, bottom: 10, width: 3, borderRadius: 3,
+        background: preset.tint, opacity: active ? 1 : 0, transition: 'opacity .2s ease',
+      }} />
+
+      <div style={{
+        width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        background: active ? `${preset.tint}26` : 'var(--c-soft-bg)',
+        border: `1px solid ${active ? `${preset.tint}45` : 'var(--c-border)'}`,
+        color: active ? preset.tint : C.muted, transition: 'all .2s ease',
+      }}>
+        <PIcon size={15} />
+      </div>
+
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 7, flexWrap: 'wrap', marginBottom: 7 }}>
+          <span style={{ fontWeight: 700, fontSize: 12.5, color: active ? C.text : C.subtle }}>
+            {preset.title}
+          </span>
+          {preset.recommended && (
+            <span style={{
+              fontSize: 8, fontWeight: 800, letterSpacing: .6, textTransform: 'uppercase',
+              padding: '1px 5px', borderRadius: 4, color: '#34d399',
+              background: 'rgba(52,211,153,.12)', border: '1px solid rgba(52,211,153,.25)',
+            }}>
+              Recommended
+            </span>
+          )}
+        </div>
+        <FlowChain chain={preset.chain} />
+        <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.45, marginTop: 7 }}>
+          {preset.desc}
+        </div>
+      </div>
+
+      <span style={{
+        width: 18, height: 18, borderRadius: '50%', flexShrink: 0, marginTop: 1,
+        border: `2px solid ${active ? preset.tint : 'var(--c-border)'}`,
+        background: active ? preset.tint : 'transparent',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all .2s ease',
+      }}>
+        {active && (
+          <svg width="10" height="10" viewBox="0 0 12 12">
+            <path d="M2.5 6.2l2.3 2.3 4.7-5" fill="none" stroke="#fff"
+              strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+        )}
+      </span>
+    </button>
+  );
+}
+
+// "VC — auto-assigned" row shown at the end of every NT reviewer list.
+function NtVcRow() {
+  return (
+    <div style={{
+      display: 'flex', alignItems: 'center', gap: 10,
+      padding: '8px 12px', borderRadius: 10,
+      background: 'rgba(244,114,182,.04)', border: '1px solid rgba(244,114,182,.12)',
+    }}>
+      <div style={{ width: 6, height: 6, borderRadius: '50%', background: '#f472b6', flexShrink: 0 }} />
+      <span style={{ fontWeight: 700, fontSize: 11, color: '#f472b6', minWidth: 92 }}>VC</span>
+      <span style={{ fontSize: 10, color: C.muted, flex: 1 }}>
+        Auto-assigned — final sign-off on every NT appraisal
+      </span>
+      <span style={{
+        fontSize: 9, color: '#f472b6', background: 'rgba(244,114,182,.1)',
+        border: '1px solid rgba(244,114,182,.2)', borderRadius: 20, padding: '1px 7px',
+        fontWeight: 700, flexShrink: 0,
+      }}>
+        Auto ✓
+      </span>
+    </div>
+  );
+}
+
+const ntHelperText = { fontSize: 11, color: C.muted, lineHeight: 1.5, margin: '-4px 0 11px' };
+
 // ── Sub-components ─────────────────────────────────────────────────────────────
 
 function Stepper({ current, steps: stepList = STEPS }) {
@@ -1035,6 +1251,7 @@ export default function AddFacultyPage() {
   const [ntHasFirstReviewer,  setNtHasFirstReviewer]  = useState(false);
   const [ntFirstReviewerType, setNtFirstReviewerType] = useState('ro'); // 'ro' | 'depthead'
   const [ntRegRequired,       setNtRegRequired]       = useState(true);
+  const [roViaRegistrar,      setRoViaRegistrar]      = useState(true); // Reporting Officer's own appraisal path
   const [templates,        setTemplates]        = useState([]);
   const [templatesLoading, setTemplatesLoading] = useState(false);
   const [ros,              setRos]              = useState([]);
@@ -1127,6 +1344,9 @@ export default function AddFacultyPage() {
     ? buildChainNodes(ntDirectVC, ntHasFirstReviewer, ntFirstReviewerType, ntRegRequired)
         .filter(n => n !== 'Staff')
         .map((designation, i) => ({ stepNo: i + 1, designation, status: 'WAITING' }))
+    : (isNonTeaching && role === 'reporting_officer')
+    ? (roViaRegistrar ? ['Registrar', 'VC'] : ['VC'])
+        .map((designation, i) => ({ stepNo: i + 1, designation, status: 'WAITING' }))
     : (selectedTemplate?.steps
         ? selectedTemplate.steps.map(s => ({ stepNo: s.step_no, designation: s.designation, status: 'WAITING' }))
         : ntWorkflowSteps);
@@ -1192,6 +1412,7 @@ export default function AddFacultyPage() {
     setNtHasFirstReviewer(false);
     setNtFirstReviewerType('ro');
     setNtRegRequired(true);
+    setRoViaRegistrar(true);
     setForm(p => ({ ...p, appraisal_role: '', school: '', department: '', workflow_template_id: '', reporting_officer_email: '', registrar_email: '' }));
   };
   const handleTrack = (t) => {
@@ -1220,6 +1441,7 @@ export default function AddFacultyPage() {
       setNtHasFirstReviewer(false);
       setNtFirstReviewerType('ro');
       setNtRegRequired(true);
+      setRoViaRegistrar(true);
     }
   };
 
@@ -1269,6 +1491,7 @@ export default function AddFacultyPage() {
     try {
       // Build clean payload — strip empty strings to null, set reports_to_registrar
       const isNtStaff = isNonTeaching && role === 'non_teaching_staff';
+      const isNtRO    = isNonTeaching && role === 'reporting_officer';
       const createPayload = isNtStaff
         ? {
             ...form,
@@ -1279,6 +1502,13 @@ export default function AddFacultyPage() {
             registrar_email: (!ntDirectVC && (!ntHasFirstReviewer || ntRegRequired))
               ? (form.registrar_email || null)
               : null,
+          }
+        : isNtRO
+        ? {
+            ...form,
+            reports_to_registrar: roViaRegistrar,
+            reporting_officer_email: null,
+            registrar_email: roViaRegistrar ? (form.registrar_email || null) : null,
           }
         : {
             ...form,
@@ -1306,6 +1536,8 @@ export default function AddFacultyPage() {
         teachingExperience: form.teaching_experience || null,
         template:           (isNonTeaching && role === 'non_teaching_staff')
                               ? buildChainLabel(ntDirectVC, ntHasFirstReviewer, ntFirstReviewerType, ntRegRequired)
+                              : (isNonTeaching && role === 'reporting_officer')
+                              ? (roViaRegistrar ? 'Reporting Officer → Registrar → VC' : 'Reporting Officer → VC')
                               : (selectedTemplate?.name || null),
         reportingOfficer:   form.reporting_officer_email ? (ros.find(r => r.email === form.reporting_officer_email)?.full_name || form.reporting_officer_email) : null,
         registrar:          form.registrar_email ? (registrarsList.find(r => r.email === form.registrar_email)?.full_name || form.registrar_email) : null,
@@ -1524,81 +1756,28 @@ export default function AddFacultyPage() {
       );
     }
 
-    // ── Non-Teaching: dynamic toggle-based workflow builder ──────────────────────
+    // ── Non-Teaching: approval-path picker ──────────────────────────────────────
     if (isNonTeaching) {
       const ntRole = NT_ROLES.find(r => r.value === role);
       const NTIcon = ntRole?.icon;
-      const isStaff = role === 'non_teaching_staff';
+      const isStaff     = role === 'non_teaching_staff';
+      const isRO        = role === 'reporting_officer';
+      const isRegistrar = role === 'registrar';
 
-      const chainNodes = isStaff
-        ? buildChainNodes(ntDirectVC, ntHasFirstReviewer, ntFirstReviewerType, ntRegRequired)
-        : [];
-
-      const nodeColorMap = {
-        'Staff': C.accent,
-        'Reporting Officer': '#fb923c',
-        'Dept Head': '#fb923c',
-        'Registrar': '#22d3ee',
-        'VC': '#f472b6',
-      };
-
-      const ToggleRow = ({ label, sub, checked, onChange, color, children }) => (
-        <div style={{
-          padding: '13px 15px', borderRadius: 10,
-          background: checked ? `${color}07` : 'rgba(255,255,255,.02)',
-          border: `1.5px solid ${checked ? `${color}30` : 'rgba(255,255,255,.08)'}`,
-          transition: 'all .2s',
-        }}>
-          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12 }}>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontWeight: 700, fontSize: 12, color: checked ? color : C.text }}>{label}</div>
-              {sub && <div style={{ fontSize: 10, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>{sub}</div>}
-            </div>
-            <button
-              type="button"
-              onClick={() => onChange(!checked)}
-              style={{
-                flexShrink: 0, padding: '5px 14px', borderRadius: 20,
-                border: `1.5px solid ${checked ? color : 'rgba(255,255,255,.12)'}`,
-                background: checked ? `${color}18` : 'rgba(255,255,255,.04)',
-                cursor: 'pointer', fontSize: 11, fontWeight: 800,
-                color: checked ? color : C.muted,
-                transition: 'all .2s',
-              }}
-            >
-              {checked ? 'ON' : 'OFF'}
-            </button>
-          </div>
-          {checked && children && (
-            <div style={{ marginTop: 12, paddingTop: 12, borderTop: '1px solid rgba(255,255,255,.06)' }}>
-              {children}
-            </div>
-          )}
-        </div>
-      );
-
-      const PersonPicker = ({ label, color, value, onChange, options }) => (
-        <div style={{
-          borderRadius: 10, overflow: 'hidden',
-          border: `1.5px solid ${value ? `${color}40` : 'rgba(255,255,255,.09)'}`,
-          background: value ? `${color}07` : 'rgba(255,255,255,.02)',
-          transition: 'border-color .2s, background .2s',
-        }}>
+      const PersonPicker = ({ label, color, value, onChange, options, hint }) => (
+        <div>
           <div style={{
-            display: 'flex', alignItems: 'center', gap: 9,
-            padding: '9px 13px', borderBottom: '1px solid rgba(255,255,255,.06)',
-            background: 'rgba(255,255,255,.015)',
+            display: 'flex', alignItems: 'center', gap: 10,
+            padding: '8px 12px', borderRadius: 10,
+            border: `1px solid ${value ? `${color}40` : 'var(--c-border)'}`,
+            background: value ? `${color}07` : 'var(--c-card)',
+            transition: 'border-color .2s, background .2s',
           }}>
-            <div style={{ width: 7, height: 7, borderRadius: '50%', flexShrink: 0, background: value ? color : 'rgba(255,255,255,.2)' }} />
-            <span style={{ fontWeight: 700, fontSize: 12, color: value ? color : C.subtle }}>{label}</span>
-            {value && <span style={{ marginLeft: 'auto', fontSize: 10, color, fontWeight: 700 }}>✓ Assigned</span>}
-          </div>
-          <div style={{ padding: '10px 13px' }}>
+            <div style={{ width: 6, height: 6, borderRadius: '50%', flexShrink: 0, background: value ? color : 'rgba(148,163,184,.4)' }} />
+            <span style={{ fontWeight: 700, fontSize: 11, color: value ? color : C.subtle, flexShrink: 0, minWidth: 92 }}>{label}</span>
             {options.length === 0
-              ? <div style={{ fontSize: 11, color: C.red, padding: '7px 11px', borderRadius: 7, background: 'rgba(248,113,113,.07)', border: '1px solid rgba(248,113,113,.2)' }}>
-                  No {label}s found — add one in User List first.
-                </div>
-              : <select className="ifield" style={{ ...inp, margin: 0 }} value={value} onChange={onChange}>
+              ? <span style={{ fontSize: 10, color: C.red }}>No {label}s found — add one in User List first.</span>
+              : <select className="ifield" style={{ ...inp, margin: 0, flex: 1 }} value={value} onChange={onChange}>
                   <option value="">— Select {label} —</option>
                   {options.map(o => (
                     <option key={o.email} value={o.email}>
@@ -1608,19 +1787,20 @@ export default function AddFacultyPage() {
                 </select>
             }
           </div>
+          {hint && <div style={{ fontSize: 9.5, color: C.muted, marginTop: 4, paddingLeft: 2 }}>{hint}</div>}
         </div>
       );
 
       return (
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
 
           {/* Role bar */}
           {ntRole && (
             <div style={{
-              display: 'flex', alignItems: 'center', gap: 11, padding: '11px 13px', borderRadius: 9,
+              display: 'flex', alignItems: 'center', gap: 11, padding: '10px 13px', borderRadius: 10,
               background: `${ntRole.color}0c`, border: `1px solid ${ntRole.color}22`,
             }}>
-              <div style={{ width: 32, height: 32, borderRadius: 8, flexShrink: 0, background: `${ntRole.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ntRole.color }}>
+              <div style={{ width: 30, height: 30, borderRadius: 8, flexShrink: 0, background: `${ntRole.color}18`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: ntRole.color }}>
                 <NTIcon size={14} />
               </div>
               <div style={{ flex: 1 }}>
@@ -1628,109 +1808,103 @@ export default function AddFacultyPage() {
                 <div style={{ fontSize: 10, color: C.muted }}>{ntRole.desc}</div>
               </div>
               <button type="button" onClick={() => { setErr(null); setStep(0); }}
-                style={{ fontSize: 11, color: C.muted, background: 'transparent', border: '1px solid rgba(255,255,255,.08)', borderRadius: 7, padding: '4px 9px', cursor: 'pointer' }}>
+                style={{ fontSize: 11, color: C.muted, background: 'transparent', border: '1px solid var(--c-border)', borderRadius: 7, padding: '4px 10px', cursor: 'pointer' }}>
                 Change
               </button>
             </div>
           )}
 
-          {/* Reviewer roles — no workflow config needed */}
-          {!isStaff && (
-            <InfoBox color="purple">
-              This role acts as a reviewer in the NT appraisal workflow. No approval chain setup is needed for reviewer accounts.
-            </InfoBox>
-          )}
-
-          {/* Workflow builder — staff only */}
+          {/* ═══ NON-TEACHING STAFF — full approval-path picker ═══ */}
           {isStaff && (
             <>
-              {/* Toggle chain builder */}
               <div>
-                <SL>Configure Approval Chain</SL>
+                <SL>How should this appraisal be approved?</SL>
+                <p style={ntHelperText}>
+                  Pick the review path this staff member’s yearly appraisal follows. The people are assigned below.
+                </p>
                 {templatesLoading
-                  ? <div style={{ fontSize: 11, color: C.muted, padding: 12, borderRadius: 8, background: 'rgba(255,255,255,.03)', border: '1px solid rgba(255,255,255,.06)' }}>Loading templates…</div>
+                  ? <div style={{ fontSize: 11, color: C.muted, padding: 12, borderRadius: 10, background: 'var(--c-soft-bg)', border: '1px solid var(--c-border)' }}>Loading…</div>
                   : (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-
-                      {/* Toggle 1: Direct to VC */}
-                      <ToggleRow
-                        label="Skip all reviewers — send directly to VC"
-                        sub="Staff's appraisal bypasses RO and Registrar and goes straight to the VC"
-                        checked={ntDirectVC}
-                        onChange={v => {
-                          setNtDirectVC(v);
-                          if (v) {
-                            setNtHasFirstReviewer(false);
-                            setForm(p => ({ ...p, reporting_officer_email: '', registrar_email: '' }));
-                          }
-                        }}
-                        color="#f472b6"
-                      />
-
-                      {/* Toggle 2: First-level reviewer (hidden when directVC) */}
-                      {!ntDirectVC && (
-                        <ToggleRow
-                          label="Include a first-level reviewer"
-                          sub="A Reporting Officer or Department Head reviews the appraisal before escalation"
-                          checked={ntHasFirstReviewer}
-                          onChange={v => {
-                            setNtHasFirstReviewer(v);
-                            if (!v) setForm(p => ({ ...p, reporting_officer_email: '' }));
+                      {NT_PATH_PRESETS.map(preset => (
+                        <PathCard
+                          key={preset.id}
+                          preset={preset}
+                          active={matchNtPreset(ntDirectVC, ntHasFirstReviewer, ntRegRequired) === preset.id}
+                          onSelect={() => {
+                            setNtDirectVC(preset.flags.directVC);
+                            setNtHasFirstReviewer(preset.flags.hasFirst);
+                            setNtRegRequired(preset.flags.regRequired);
+                            if (!preset.flags.hasFirst) setNtFirstReviewerType('ro');
+                            setForm(p => ({
+                              ...p,
+                              reporting_officer_email: preset.flags.hasFirst ? p.reporting_officer_email : '',
+                              registrar_email: (!preset.flags.directVC && (!preset.flags.hasFirst || preset.flags.regRequired))
+                                ? p.registrar_email : '',
+                            }));
                           }}
-                          color="#fb923c"
-                        >
-                          {/* Reviewer type choice: RO vs Dept Head */}
-                          <div style={{ display: 'flex', gap: 8 }}>
-                            {[
-                              { val: 'ro',       label: 'Reporting Officer', sub: 'Standard first-level review'    },
-                              { val: 'depthead', label: 'Department Head',   sub: 'Head of department reviews first' },
-                            ].map(opt => (
-                              <button
-                                type="button" key={opt.val}
-                                onClick={() => setNtFirstReviewerType(opt.val)}
-                                style={{
-                                  flex: 1, padding: '9px 10px', borderRadius: 9, cursor: 'pointer', textAlign: 'left',
-                                  border: `1.5px solid ${ntFirstReviewerType === opt.val ? '#fb923c' : 'rgba(255,255,255,.09)'}`,
-                                  background: ntFirstReviewerType === opt.val ? 'rgba(251,146,60,.1)' : 'rgba(255,255,255,.03)',
-                                  transition: 'all .15s',
-                                }}
-                              >
-                                <div style={{ fontWeight: 700, fontSize: 11, color: ntFirstReviewerType === opt.val ? '#fb923c' : C.text, marginBottom: 2 }}>
-                                  {opt.label}
-                                </div>
-                                <div style={{ fontSize: 9, color: C.muted }}>{opt.sub}</div>
-                              </button>
-                            ))}
-                          </div>
-                        </ToggleRow>
-                      )}
-
-                      {/* Toggle 3: Include Registrar (shown only when has first reviewer) */}
-                      {!ntDirectVC && ntHasFirstReviewer && (
-                        <ToggleRow
-                          label="Include Registrar after first reviewer"
-                          sub="Registrar reviews and approves before the final VC sign-off"
-                          checked={ntRegRequired}
-                          onChange={v => {
-                            setNtRegRequired(v);
-                            if (!v) setForm(p => ({ ...p, registrar_email: '' }));
-                          }}
-                          color="#22d3ee"
                         />
-                      )}
+                      ))}
                     </div>
                   )
                 }
+
+                {/* First-level reviewer type — only when the chosen path has one */}
+                {!ntDirectVC && ntHasFirstReviewer && (
+                  <div style={{
+                    marginTop: 10, padding: '12px 13px', borderRadius: 11,
+                    background: 'var(--c-soft-bg)', border: '1px solid var(--c-border)',
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: C.subtle, marginBottom: 8 }}>
+                      Who is the first-level reviewer?
+                    </div>
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      {[
+                        { val: 'ro',       label: 'Reporting Officer', sub: 'Staff reports to a Reporting Officer' },
+                        { val: 'depthead', label: 'Department Head',   sub: 'The head of their department' },
+                      ].map(opt => {
+                        const on = ntFirstReviewerType === opt.val;
+                        return (
+                          <button
+                            type="button" key={opt.val}
+                            onClick={() => setNtFirstReviewerType(opt.val)}
+                            className="act-btn"
+                            style={{
+                              flex: 1, padding: '9px 11px', borderRadius: 10, cursor: 'pointer', textAlign: 'left',
+                              border: `1px solid ${on ? '#fb923c88' : 'var(--c-border)'}`,
+                              background: on ? 'rgba(251,146,60,.12)' : 'var(--c-card)',
+                              boxShadow: on ? '0 0 0 1px #fb923c33' : 'none',
+                              transition: 'all .18s ease',
+                            }}
+                          >
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 3 }}>
+                              <span style={{
+                                width: 13, height: 13, borderRadius: '50%', flexShrink: 0,
+                                border: `2px solid ${on ? '#fb923c' : 'var(--c-border)'}`,
+                                background: on ? '#fb923c' : 'transparent',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                              }}>
+                                {on && <span style={{ width: 4, height: 4, borderRadius: '50%', background: '#fff' }} />}
+                              </span>
+                              <span style={{ fontWeight: 700, fontSize: 11, color: on ? '#fb923c' : C.text }}>
+                                {opt.label}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 9, color: C.muted, lineHeight: 1.5, paddingLeft: 19 }}>{opt.sub}</div>
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
               </div>
 
-              {/* No templates exist at all */}
               {noTemplatesAtAll && (
                 <div style={{
-                  padding: '10px 14px', borderRadius: 8, fontSize: 11, lineHeight: 1.6,
-                  color: C.red, background: 'rgba(248,113,113,.07)',
-                  border: '1px solid rgba(248,113,113,.22)',
+                  padding: '10px 14px', borderRadius: 10, fontSize: 11, lineHeight: 1.6,
+                  color: C.red, background: 'rgba(248,113,113,.07)', border: '1px solid rgba(248,113,113,.22)',
                 }}>
-                  <strong>No workflow templates found.</strong> You must create at least one template before adding NT staff.{' '}
+                  <strong>No workflow templates found.</strong> Create at least one template before adding NT staff.{' '}
                   <button type="button" onClick={() => navigate('/workflow/templates')}
                     style={{ color: C.red, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: 11 }}>
                     Create templates →
@@ -1738,56 +1912,24 @@ export default function AddFacultyPage() {
                 </div>
               )}
 
-              {/* No-template warning */}
               {noTemplateMatch && (
                 <div style={{
-                  padding: '10px 14px', borderRadius: 8, fontSize: 11, lineHeight: 1.6,
-                  color: C.yellow, background: 'rgba(251,191,36,.07)',
-                  border: '1px solid rgba(251,191,36,.22)',
+                  padding: '10px 14px', borderRadius: 10, fontSize: 11, lineHeight: 1.6,
+                  color: C.yellow, background: 'rgba(251,191,36,.07)', border: '1px solid rgba(251,191,36,.22)',
                 }}>
-                  <strong>No matching template found</strong> for
-                  &ldquo;{buildChainLabel(ntDirectVC, ntHasFirstReviewer, ntFirstReviewerType, ntRegRequired)}&rdquo;.
-                  The default template will be used at appraisal time, which may not match this chain.
-                  Set up the correct template in{' '}
+                  <strong>Heads up:</strong> no saved template exactly matches this path yet. You can still create
+                  this staff member — the default template is used at appraisal time. To make it official, add a
+                  matching template in{' '}
                   <button type="button" onClick={() => navigate('/workflow/templates')}
                     style={{ color: C.yellow, fontWeight: 700, background: 'none', border: 'none', cursor: 'pointer', padding: 0, textDecoration: 'underline', fontSize: 11 }}>
                     Workflow Templates
-                  </button>{' '}first.
+                  </button>.
                 </div>
               )}
 
-              {/* Chain preview */}
-              <div>
-                <SL>Approval Chain Preview</SL>
-                <div style={{
-                  display: 'flex', alignItems: 'center', flexWrap: 'wrap', gap: 0,
-                  padding: '12px 14px', borderRadius: 10,
-                  background: 'rgba(255,255,255,.02)', border: '1px solid rgba(255,255,255,.06)',
-                }}>
-                  {chainNodes.map((node, i) => (
-                    <div key={node + i} style={{ display: 'flex', alignItems: 'center' }}>
-                      <div style={{
-                        padding: '4px 10px', borderRadius: 6, fontSize: 11, fontWeight: 700,
-                        background: `${nodeColorMap[node] ?? C.accent}14`,
-                        border: `1.5px solid ${nodeColorMap[node] ?? C.accent}30`,
-                        color: nodeColorMap[node] ?? C.accent,
-                      }}>
-                        {node}
-                      </div>
-                      {i < chainNodes.length - 1 && (
-                        <span style={{ padding: '0 6px', color: 'rgba(255,255,255,.2)', fontSize: 15 }}>→</span>
-                      )}
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Assign reviewers */}
               <div>
                 <SL>Assign Reviewers</SL>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-
-                  {/* First reviewer picker (RO or DeptHead) */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {!ntDirectVC && ntHasFirstReviewer && (
                     <PersonPicker
                       label={ntFirstReviewerType === 'ro' ? 'Reporting Officer' : 'Department Head'}
@@ -1797,8 +1939,6 @@ export default function AddFacultyPage() {
                       options={ros}
                     />
                   )}
-
-                  {/* Registrar picker — shown when no first reviewer (base chain) OR ntRegRequired is ON */}
                   {!ntDirectVC && (!ntHasFirstReviewer || ntRegRequired) && (
                     <PersonPicker
                       label="Registrar"
@@ -1808,27 +1948,81 @@ export default function AddFacultyPage() {
                       options={registrarsList}
                     />
                   )}
-
-                  {/* VC — always auto-assigned */}
-                  <div style={{
-                    display: 'flex', alignItems: 'center', gap: 9,
-                    padding: '10px 13px', borderRadius: 10,
-                    background: 'rgba(244,114,182,.04)', border: '1px solid rgba(244,114,182,.12)',
-                  }}>
-                    <div style={{ width: 7, height: 7, borderRadius: '50%', background: '#f472b6', flexShrink: 0 }} />
-                    <div>
-                      <div style={{ fontWeight: 700, fontSize: 12, color: '#f472b6' }}>VC</div>
-                      <div style={{ fontSize: 10, color: C.muted, marginTop: 1 }}>
-                        Auto-assigned — VC reviews all NT appraisals at the final step
-                      </div>
-                    </div>
-                    <div style={{ marginLeft: 'auto', fontSize: 10, color: '#f472b6', background: 'rgba(244,114,182,.1)', border: '1px solid rgba(244,114,182,.2)', borderRadius: 20, padding: '2px 8px', fontWeight: 700, flexShrink: 0 }}>
-                      Auto ✓
-                    </div>
-                  </div>
+                  <NtVcRow />
                 </div>
               </div>
             </>
+          )}
+
+          {/* ═══ REPORTING OFFICER — choose their OWN appraisal path ═══ */}
+          {isRO && (
+            <>
+              <div>
+                <SL>How is this Reporting Officer’s own appraisal approved?</SL>
+                <p style={ntHelperText}>
+                  A Reporting Officer reviews other staff. This sets who reviews <em>their</em> yearly appraisal.
+                </p>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {RO_PATH_PRESETS.map(preset => (
+                    <PathCard
+                      key={preset.id}
+                      preset={preset}
+                      active={roViaRegistrar === preset.viaRegistrar}
+                      onSelect={() => {
+                        setRoViaRegistrar(preset.viaRegistrar);
+                        if (!preset.viaRegistrar) setForm(p => ({ ...p, registrar_email: '' }));
+                      }}
+                    />
+                  ))}
+                </div>
+              </div>
+
+              <div>
+                <SL>Assign Reviewers</SL>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  {roViaRegistrar && (
+                    <PersonPicker
+                      label="Registrar"
+                      color="#22d3ee"
+                      value={form.registrar_email}
+                      onChange={set('registrar_email')}
+                      options={registrarsList}
+                      hint="Leave blank to use the institution’s default Registrar."
+                    />
+                  )}
+                  <NtVcRow />
+                </div>
+              </div>
+            </>
+          )}
+
+          {/* ═══ REGISTRAR — fixed path ═══ */}
+          {isRegistrar && (
+            <div>
+              <SL>Approval path</SL>
+              <div style={{
+                display: 'flex', alignItems: 'center', gap: 12,
+                padding: '13px 14px', borderRadius: 12,
+                background: 'var(--c-card)', border: '1px solid var(--c-border)',
+              }}>
+                <div style={{
+                  width: 34, height: 34, borderRadius: 9, flexShrink: 0,
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                  background: 'rgba(244,114,182,.14)', border: '1px solid rgba(244,114,182,.3)', color: '#f472b6',
+                }}>
+                  <I.shield size={15} />
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: 12.5, color: C.text, marginBottom: 7 }}>
+                    Signed off by the VC
+                  </div>
+                  <FlowChain chain={['Registrar', 'VC']} />
+                  <div style={{ fontSize: 10.5, color: C.muted, lineHeight: 1.45, marginTop: 7 }}>
+                    A Registrar’s own appraisal always goes straight to the VC — nothing to configure here.
+                  </div>
+                </div>
+              </div>
+            </div>
           )}
         </div>
       );
@@ -2061,7 +2255,13 @@ export default function AddFacultyPage() {
     { k: 'Dept',     v: dept   || null },
     { k: 'Name',     v: form.full_name || null },
     { k: 'Email',    v: form.email     || null },
-    { k: 'Approval Path', v: isNonTeaching && role === 'non_teaching_staff' ? buildChainLabel(ntDirectVC, ntHasFirstReviewer, ntFirstReviewerType, ntRegRequired) : null },
+    { k: 'Approval Path', v: isNonTeaching
+        ? (role === 'non_teaching_staff'
+            ? buildChainLabel(ntDirectVC, ntHasFirstReviewer, ntFirstReviewerType, ntRegRequired)
+            : role === 'reporting_officer'
+            ? (roViaRegistrar ? 'RO → Registrar → VC' : 'RO → VC')
+            : null)
+        : null },
     { k: 'Rep. Officer',  v: form.reporting_officer_email ? (ros.find(r => r.email === form.reporting_officer_email)?.full_name || form.reporting_officer_email) : null },
     { k: 'Registrar',     v: form.registrar_email ? (registrarsList.find(r => r.email === form.registrar_email)?.full_name || form.registrar_email) : null },
   ].filter(r => r.v);
@@ -2173,7 +2373,7 @@ export default function AddFacultyPage() {
           <Stepper current={step} steps={isNonTeaching
             ? [
                 { label: 'Classification', sub: 'Staff type & role'      },
-                { label: 'Workflow',       sub: 'Approval template'       },
+                { label: 'Approval',       sub: 'Who reviews & in what order' },
                 { label: 'Account',        sub: 'Login credentials'       },
                 { label: 'Profile',        sub: 'Professional details'    },
               ]
@@ -2183,10 +2383,10 @@ export default function AddFacultyPage() {
           {/* Step heading */}
           <div style={{ marginBottom: 22 }}>
             <div style={{ fontSize: 17, fontWeight: 700, color: C.text }}>
-              {step === 1 && isNonTeaching ? 'Workflow Setup' : STEPS[step].label}
+              {step === 1 && isNonTeaching ? 'Approval Path' : STEPS[step].label}
             </div>
             <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>
-              {step === 1 && isNonTeaching ? 'Assign an approval template for this staff member' : STEPS[step].sub}
+              {step === 1 && isNonTeaching ? 'Choose who reviews this staff member’s appraisal, and in what order' : STEPS[step].sub}
             </div>
           </div>
 
@@ -2283,9 +2483,11 @@ export default function AddFacultyPage() {
             sub={isNonTeaching
               ? role === 'non_teaching_staff'
                 ? `Chain: ${buildChainLabel(ntDirectVC, ntHasFirstReviewer, ntFirstReviewerType, ntRegRequired)}`
-                : selectedTemplate
-                  ? `Template: ${selectedTemplate.name}`
-                  : 'Approval chain — default workflow'
+                : role === 'reporting_officer'
+                  ? `Chain: ${roViaRegistrar ? 'Registrar → VC' : 'Direct → VC'}`
+                  : selectedTemplate
+                    ? `Template: ${selectedTemplate.name}`
+                    : 'Approval chain — default workflow'
               : 'Score visibility at each stage'}
             delay={100}
           >
