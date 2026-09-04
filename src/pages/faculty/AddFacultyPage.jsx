@@ -5,24 +5,25 @@ import { C } from '../../constants/colors';
 import { api } from '../../api/client';
 import { logAction } from '../../utils/activityLog';
 import { inp, lbl, pBtn, oBtn } from '../../constants/styleTokens';
-import { ENGG_SCHOOLS, NON_ENGG_SCHOOLS, SOEMR_DEPTS } from '../../constants/schools';
 import Card from '../../components/Card';
 import Modal from '../../components/Modal';
 import PageHead from '../../components/PageHead';
 import { I } from '../../components/icons';
 import WorkflowTimeline from '../../components/workflow/WorkflowTimeline';
 import { useWorkflowTemplate } from '../../hooks/useWorkflow';
+import { useSchools } from '../../hooks/useSchools';
 
 const ENGG_ROLES = [
   { value: 'faculty',  label: 'Faculty',             color: C.accent,  icon: I.users,  flow: 'HOD/Director → Dean (Eng) → VC'          },
-  { value: 'hod',      label: 'HOD',                 color: '#a78bfa', icon: I.school, flow: 'Director (SoEMR) → Dean (Eng) → VC', soEmrOnly: true },
+  { value: 'hod',      label: 'HOD',                 color: '#a78bfa', icon: I.school, flow: 'Director → Dean (Eng) → VC', hodOnly: true },
   { value: 'director', label: 'Director',            color: C.yellow,  icon: I.star,   flow: 'Dean (Engineering) → VC'                  },
   { value: 'dean',     label: 'Dean of Engineering', color: C.green,   icon: I.shield, flow: 'VC only'                                  },
 ];
 const NON_ENGG_ROLES = [
-  { value: 'faculty',  label: 'Faculty',                 color: C.accent, icon: I.users,  flow: 'Director → Dean (Non-Eng) → VC' },
-  { value: 'director', label: 'Director',                color: C.yellow, icon: I.star,   flow: 'Dean (Non-Engineering) → VC'    },
-  { value: 'dean',     label: 'Dean of Non-Engineering', color: C.green,  icon: I.shield, flow: 'VC only'                        },
+  { value: 'faculty',  label: 'Faculty',                 color: C.accent,  icon: I.users,  flow: 'HOD/Director → Dean (Non-Eng) → VC'      },
+  { value: 'hod',      label: 'HOD',                     color: '#a78bfa', icon: I.school, flow: 'Director → Dean (Non-Eng) → VC', hodOnly: true },
+  { value: 'director', label: 'Director',                color: C.yellow,  icon: I.star,   flow: 'Dean (Non-Engineering) → VC'    },
+  { value: 'dean',     label: 'Dean of Non-Engineering', color: C.green,   icon: I.shield, flow: 'VC only'                        },
 ];
 const CISR_ROLES = [
   { value: 'faculty',     label: 'Faculty',     color: C.accent,  icon: I.users,  flow: 'Center Head → VC' },
@@ -52,7 +53,7 @@ const EMPTY = {
 
 // ── Appraisal flow computation ─────────────────────────────────────────────────
 
-function computeFlow(staffType, track, role, school, dept, reportsDirectly = false) {
+function computeFlow(staffType, track, role, school, dept, hasHod = false) {
   if (!staffType || !role) return [];
   const n = (label, sub, sees, hides) => ({ label, sub, sees, hides });
 
@@ -77,12 +78,13 @@ function computeFlow(staffType, track, role, school, dept, reportsDirectly = fal
   const sc    = school || '—';
 
   if (role === 'faculty') {
-    if (school === 'SoEMR') {
+    // Any school with an HOD layer (not just SoEMR) gets the extra HOD step.
+    if (hasHod) {
       const hod = dept ? `HOD — ${dept}` : 'HOD (select dept below)';
       return [
-        n('Faculty (SoEMR)', 'Fills and submits form', null, null),
+        n(`Faculty (${sc})`, 'Fills and submits form', null, null),
         n(hod, 'Reviews & scores', 'Faculty self-score', null),
-        n('Director (SoEMR)', 'Reviews & scores', 'Faculty self-score only', 'HOD score hidden'),
+        n(`Director (${sc})`, 'Reviews & scores', 'Faculty self-score only', 'HOD score hidden'),
         n(dean, 'Reviews & scores', 'Faculty self-score only', 'HOD + Director scores hidden'),
         n('VC', 'Final review & scores', 'All 4 scores: Faculty + HOD + Director + Dean', null),
       ];
@@ -100,7 +102,7 @@ function computeFlow(staffType, track, role, school, dept, reportsDirectly = fal
     const hod = dept ? `HOD — ${dept}` : 'HOD (select dept below)';
     return [
       n(hod, 'Fills and submits form', null, null),
-      n('Director (SoEMR)', 'Reviews & scores', 'HOD self-score', null),
+      n(`Director (${sc})`, 'Reviews & scores', 'HOD self-score', null),
       n(dean, 'Reviews & scores', 'HOD self-score only', 'Director score hidden'),
       n('VC', 'Final review & scores', 'HOD + Director + Dean scores', null),
     ];
@@ -1238,6 +1240,10 @@ function ImportModal({ onClose }) {
 export default function AddFacultyPage() {
   const navigate = useNavigate();
 
+  // Live schools (from the Schools page) with graceful fallback to the
+  // hardcoded list until the backend endpoint is deployed — see Docs/Schools.md
+  const { engineering: engSchoolsDyn, nonEngineering: nonEngSchoolsDyn, byCode: schoolByCode } = useSchools();
+
   const [step,        setStep]        = useState(0);
   const [staffType,   setStaffType]   = useState('');   // 'teaching' | 'non_teaching'
   const [track,       setTrack]       = useState('');   // 'engineering' | 'non_engineering' | 'cisr'
@@ -1308,13 +1314,22 @@ export default function AddFacultyPage() {
   // Role grid: 3-col for exactly 3 items, 2-col for 2 or 4
   const roleGridCols = availRoles.length === 3 ? 'repeat(3, 1fr)' : 'repeat(2, 1fr)';
 
-  const groupSchools    = isEngineering ? ENGG_SCHOOLS : NON_ENGG_SCHOOLS;
-  const showSchoolPicker = (isEngineering || isNonEng) && !!role && role !== 'dean' && role !== 'hod';
-  const schoolLocked     = role === 'hod'; // auto-locked to SoEMR
-  const showDeptFixed    = (role === 'faculty' || role === 'hod') && school === 'SoEMR';
-  const showDeptText     = role === 'faculty' && !!school && school !== 'SoEMR' && (isEngineering || isNonEng);
+  // Schools with an HOD layer — any school with "Has HOD" turned on in the Schools
+  // page qualifies, not just SoEMR. When exactly one exists we auto-assign it
+  // (same UX as before); when 0 or 2+ exist the admin picks from a filtered list.
+  // HOD-eligible schools are whichever schools in the CURRENT track have "Has HOD"
+  // turned on — evaluated per track, so Engineering and Non-Engineering each get
+  // their own independent HOD option instead of only Engineering having one.
+  const trackSchools      = isEngineering ? engSchoolsDyn : isNonEng ? nonEngSchoolsDyn : [];
+  const hodSchools        = trackSchools.filter(s => s.hasHod);
+  const selectedSchoolObj = schoolByCode(school);
+  const schoolLocked      = role === 'hod' && hodSchools.length === 1;
+  const groupSchools      = role === 'hod' ? hodSchools : trackSchools;
+  const showSchoolPicker  = (isEngineering || isNonEng) && !!role && role !== 'dean' && !schoolLocked;
+  const showDeptFixed     = (role === 'faculty' || role === 'hod') && selectedSchoolObj?.departments?.length > 0;
+  const showDeptText      = role === 'faculty' && !!school && !(selectedSchoolObj?.departments?.length > 0) && (isEngineering || isNonEng);
 
-  const flowNodes = computeFlow(staffType, track, role, school, dept);
+  const flowNodes = computeFlow(staffType, track, role, school, dept, selectedSchoolObj?.hasHod);
 
   // Dynamic NT workflow — fetched from API, falls back gracefully if unavailable
   const { steps: ntWorkflowSteps, loading: ntWorkflowLoading } = useWorkflowTemplate(
@@ -1426,13 +1441,13 @@ export default function AddFacultyPage() {
       ...p,
       school: code,
       department: '',
-      // If switching away from SoEMR and role was HOD, revert to faculty
-      appraisal_role: p.appraisal_role === 'hod' && code !== 'SoEMR' ? 'faculty' : p.appraisal_role,
+      // If switching to a school with no HOD layer and role was HOD, revert to faculty
+      appraisal_role: p.appraisal_role === 'hod' && !hodSchools.some(s => s.code === code) ? 'faculty' : p.appraisal_role,
     }));
   };
   const handleRole = (val) => {
     const update = { appraisal_role: val, department: '', workflow_template_id: '', reporting_officer_email: '', registrar_email: '' };
-    if (val === 'hod')  update.school = 'SoEMR';
+    if (val === 'hod')  update.school = hodSchools.length === 1 ? hodSchools[0].code : '';
     if (val === 'dean') update.school = track;
     setForm(p => ({ ...p, ...update }));
     // Reset NT toggles when role changes
@@ -1455,12 +1470,12 @@ export default function AddFacultyPage() {
     }
     if (step === 1) {
       if (!role) return 'Please select a role.';
-      if ((isEngineering || isNonEng) && role !== 'dean' && role !== 'hod' && !school)
+      if ((isEngineering || isNonEng) && role !== 'dean' && !schoolLocked && !school)
         return 'Please select a school.';
       if (role === 'hod' && !dept)
         return 'Please select a department for this HOD position.';
-      if (role === 'faculty' && school === 'SoEMR' && !dept)
-        return 'SoEMR faculty must be assigned to a department.';
+      if (role === 'faculty' && selectedSchoolObj?.departments?.length > 0 && !dept)
+        return `${selectedSchoolObj.full} faculty must be assigned to a department.`;
       if (isNonTeaching && role === 'non_teaching_staff') {
         if (!ntDirectVC) {
           if (ntHasFirstReviewer && !form.reporting_officer_email)
@@ -1600,14 +1615,14 @@ export default function AddFacultyPage() {
             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 10 }}>
               <TrackCard
                 label="Engineering"
-                sub="SoCSEA · SoBB · SoCE · SoEMR"
+                sub={engSchoolsDyn.map(s => s.code).join(' · ') || 'No schools configured yet'}
                 icon={I.bldg} color={C.yellow}
                 active={track === 'engineering'}
                 onClick={() => handleTrack('engineering')}
               />
               <TrackCard
                 label="Non-Engineering"
-                sub="SoCM · SoMCS · SoHSS · SoD · SoAA"
+                sub={nonEngSchoolsDyn.map(s => s.code).join(' · ') || 'No schools configured yet'}
                 icon={I.school} color={C.green}
                 active={track === 'non_engineering'}
                 onClick={() => handleTrack('non_engineering')}
@@ -2059,9 +2074,9 @@ export default function AddFacultyPage() {
               <div style={{ fontSize: 10, color: C.muted, lineHeight: 1.4 }}>
                 Flow: {r.flow}
               </div>
-              {r.soEmrOnly && (
+              {r.hodOnly && (
                 <div style={{ marginTop: 3, fontSize: 9, color: '#a78bfa', fontWeight: 600 }}>
-                  SoEMR only
+                  {hodSchools.length > 0 ? hodSchools.map(s => s.code).join(', ') + ' only' : 'No school with HOD configured'}
                 </div>
               )}
               {active && (
@@ -2076,20 +2091,24 @@ export default function AddFacultyPage() {
       {role === 'dean' && (isEngineering || isNonEng) && (
         <InfoBox color="green">
           {isEngineering
-            ? 'Dean of Engineering oversees all 4 engineering schools (SoCSEA, SoBB, SoCE, SoEMR). No specific school or department is required.'
-            : 'Dean of Non-Engineering oversees all 5 non-engineering schools (SoCM, SoMCS, SoHSS, SoD, SoAA). No specific school or department is required.'}
+            ? `Dean of Engineering oversees all ${engSchoolsDyn.length} engineering school${engSchoolsDyn.length === 1 ? '' : 's'} (${engSchoolsDyn.map(s => s.code).join(', ') || 'none configured'}). No specific school or department is required.`
+            : `Dean of Non-Engineering oversees all ${nonEngSchoolsDyn.length} non-engineering school${nonEngSchoolsDyn.length === 1 ? '' : 's'} (${nonEngSchoolsDyn.map(s => s.code).join(', ') || 'none configured'}). No specific school or department is required.`}
         </InfoBox>
       )}
       {role === 'hod' && (
         <InfoBox color="purple">
-          HOD exists only within SoEMR. The school is auto-assigned — just select the department below.
+          {hodSchools.length === 1
+            ? `HOD exists only within ${hodSchools[0].code}. The school is auto-assigned — just select the department below.`
+            : hodSchools.length > 1
+            ? `HOD exists in ${hodSchools.length} schools (${hodSchools.map(s => s.code).join(', ')}) — pick one below.`
+            : 'No school currently has an HOD layer configured — enable "Has HOD" for a school in Schools first.'}
         </InfoBox>
       )}
 
       {/* ── School picker — dropdown (non-Dean, non-HOD) ── */}
       {showSchoolPicker && (
         <div style={{ marginBottom: 18 }}>
-          <SL>{isEngineering ? 'Engineering School' : 'Non-Engineering School'}</SL>
+          <SL>{role === 'hod' ? 'School with HOD' : isEngineering ? 'Engineering School' : 'Non-Engineering School'}</SL>
           <select
             className="ifield"
             value={school}
@@ -2106,8 +2125,8 @@ export default function AddFacultyPage() {
         </div>
       )}
 
-      {/* ── HOD: SoEMR locked display ── */}
-      {schoolLocked && (
+      {/* ── HOD: single-eligible-school locked display ── */}
+      {schoolLocked && hodSchools[0] && (
         <div style={{ marginBottom: 18 }}>
           <SL>School (auto-assigned)</SL>
           <div style={{
@@ -2116,10 +2135,10 @@ export default function AddFacultyPage() {
             background: 'rgba(167,139,250,.07)', border: '1.5px solid rgba(167,139,250,.22)',
           }}>
             <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 13, fontWeight: 700, color: '#a78bfa' }}>
-              SoEMR
+              {hodSchools[0].code}
             </span>
             <span style={{ fontSize: 12, color: C.subtle }}>
-              School of Engineering, Management & Research
+              {hodSchools[0].full}
             </span>
           </div>
         </div>
@@ -2144,7 +2163,7 @@ export default function AddFacultyPage() {
         </div>
       )}
 
-      {/* ── Department — SoEMR dropdown ── */}
+      {/* ── Department — dropdown from the selected school's own department list ── */}
       {showDeptFixed && (
         <div>
           <SL>Department</SL>
@@ -2155,7 +2174,7 @@ export default function AddFacultyPage() {
             style={inp}
           >
             <option value="">— Select Department —</option>
-            {SOEMR_DEPTS.map(d => (
+            {(selectedSchoolObj?.departments ?? []).map(d => (
               <option key={d} value={d}>{d}</option>
             ))}
           </select>

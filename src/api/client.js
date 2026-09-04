@@ -251,6 +251,17 @@ const workflow = {
 }
 
 // ---------------------------------------------------------------------------
+// Schools — dynamic school catalog (track, HOD/Director layers, approval chain)
+// Backend endpoint: /admin/schools (not deployed yet — see Docs/Schools.md)
+// ---------------------------------------------------------------------------
+const schools = {
+  list:   ()             => request('/admin/schools'),
+  create: (data)         => request('/admin/schools', { method: 'POST', body: JSON.stringify(data) }),
+  update: (code, data)   => request(`/admin/schools/${encodeURIComponent(code)}`, { method: 'PUT', body: JSON.stringify(data) }),
+  remove: (code)         => request(`/admin/schools/${encodeURIComponent(code)}`, { method: 'DELETE' }),
+}
+
+// ---------------------------------------------------------------------------
 // Designations — catalog of approval designations used in NT workflows
 // ---------------------------------------------------------------------------
 const designations = {
@@ -418,4 +429,4 @@ const developer = {
   }),
 }
 
-export const api = { login, logout, getProfile, verifyMfa, users, stats, feedback, config, cycle, pending, submissions, logs, announcements, ai, export: exportData, marks, workflow, designations, workflowTemplates, profile, developer }
+export const api = { login, logout, getProfile, verifyMfa, users, stats, feedback, config, cycle, pending, submissions, logs, announcements, ai, export: exportData, marks, workflow, schools, designations, workflowTemplates, profile, developer }
