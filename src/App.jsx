@@ -18,6 +18,9 @@ const AppraisalCyclePage    = lazy(() => import('./pages/dashboard/AppraisalCycl
 const FacultyListPage       = lazy(() => import('./pages/faculty/FacultyListPage'))
 const AddFacultyPage        = lazy(() => import('./pages/faculty/AddFacultyPage'))
 
+const SchoolsListPage       = lazy(() => import('./pages/schools/SchoolsListPage'))
+const AddSchoolPage         = lazy(() => import('./pages/schools/AddSchoolPage'))
+
 const SubmissionWindowPage  = lazy(() => import('./pages/appraisal/SubmissionWindowPage'))
 const SubmissionStatusPage  = lazy(() => import('./pages/appraisal/SubmissionStatusPage'))
 
@@ -88,6 +91,9 @@ export default function App() {
 
               <Route path="faculty"             element={<FacultyListPage />}      />
               <Route path="faculty/add"         element={<AddFacultyPage />}       />
+
+              <Route path="schools"             element={<SchoolsListPage />}      />
+              <Route path="schools/add"         element={<AddSchoolPage />}        />
 
               <Route path="appraisal/window"    element={<SubmissionWindowPage />} />
               <Route path="appraisal/status"    element={<SubmissionStatusPage />} />

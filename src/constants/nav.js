@@ -19,6 +19,13 @@ export const NAV = [
     ],
   },
   {
+    label: "Schools", icon: I.bldg,
+    children: [
+      { label: "All Schools", icon: I.list,    path: "/schools"     },
+      { label: "Add School",  icon: I.addUser, path: "/schools/add" },
+    ],
+  },
+  {
     label: "Appraisal", icon: I.star,
     children: [
       { label: "Submission Window", icon: I.doc,   path: "/appraisal/window"   },

@@ -1,5 +1,7 @@
+import { createPortal } from 'react-dom';
+
 export default function Modal({ children, maxWidth = 480, onClose }) {
-  return (
+  return createPortal(
     <div
       style={{
         position: 'fixed', inset: 0,
@@ -24,6 +26,7 @@ export default function Modal({ children, maxWidth = 480, onClose }) {
       >
         {children}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
