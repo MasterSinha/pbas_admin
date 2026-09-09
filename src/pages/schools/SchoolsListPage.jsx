@@ -11,7 +11,7 @@ import { I } from '../../components/icons';
 import { pBtn, oBtn } from '../../constants/styleTokens';
 import { useFetch } from '../../hooks/useFetch';
 import SchoolForm from '../../components/schools/SchoolForm';
-import { SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, deanLabelForTrack } from '../../constants/schoolRoles';
+import { SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, deanLabelForTrack, selectedSchoolFormKey, schoolFormPayload, schoolFormLabel, cacheSchoolFormSelection, hydrateSchoolFormSelection } from '../../constants/schoolRoles';
 import { SCHOOLS as LEGACY_SCHOOLS } from '../../constants/schools';
 
 function Alert({ msg, color = C.red }) {
@@ -73,6 +73,16 @@ function MiniFlow({ nodes }) {
   );
 }
 
+function formatDeleteImpact(impact) {
+  if (!impact || typeof impact !== 'object') return '';
+  const ignored = new Set(['school', 'school_code', 'can_safe_delete', 'warnings']);
+  const rows = Object.entries(impact)
+    .filter(([key, value]) => !ignored.has(key) && typeof value === 'number' && value > 0)
+    .map(([key, value]) => `${key.replace(/_/g, ' ')}: ${value}`);
+  const warnings = Array.isArray(impact.warnings) ? impact.warnings : [];
+  return [...rows, ...warnings].join('\n');
+}
+
 // ── Edit modal ────────────────────────────────────────────────────────────────
 function EditSchoolModal({ school, onClose, onSaved }) {
   const [value,  setValue]  = useState({
@@ -87,7 +97,12 @@ function EditSchoolModal({ school, onClose, onSaved }) {
     if (!value.full_name.trim()) { setErr('Full name is required.'); return; }
     setSaving(true); setErr('');
     try {
-      await api.schools.update(school.code, value);
+      const formKey = selectedSchoolFormKey(value);
+      await api.schools.update(school.code, {
+        ...value,
+        ...schoolFormPayload(formKey),
+      });
+      cacheSchoolFormSelection(school.code, formKey);
       onSaved();
     } catch (e) {
       setErr(e.message);
@@ -182,6 +197,7 @@ function SchoolCard({ school, onRefresh, onDelete, isDeleting }) {
               <Badge color={school.track === 'engineering' ? 'blue' : school.track === 'cisr' ? 'orange' : 'green'}>{trackMeta.label}</Badge>
               {school.has_hod && <Badge color="purple">Has HOD</Badge>}
               {!school.has_director && <Badge color="yellow">No Director</Badge>}
+              <Badge color={selectedSchoolFormKey(school) === 'standard' ? 'blue' : 'purple'}>{schoolFormLabel(school)}</Badge>
               {inactive && <Badge color="gray">Inactive</Badge>}
               {school.departments?.length > 0 && (
                 <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, fontSize: 10.5, color: C.muted }}>
@@ -260,9 +276,12 @@ export default function SchoolsListPage() {
   const [rev,        setRev]        = useState(0);
   const [deletingId,  setDeletingId]  = useState(null);
   const [deleteError, setDeleteError] = useState('');
+  const [removedCodes, setRemovedCodes] = useState(() => new Set());
 
   const { data, loading, error: fetchErr } = useFetch(() => api.schools.list(), [rev]);
-  const rows = Array.isArray(data) ? data : [];
+  const rows = Array.isArray(data)
+    ? data.map(hydrateSchoolFormSelection).filter(s => !removedCodes.has(s.code))
+    : [];
   const notDeployed = fetchErr && (fetchErr.includes('404') || fetchErr.includes('Not Found') || fetchErr.includes('500'));
 
   const total    = rows.length;
@@ -276,9 +295,30 @@ export default function SchoolsListPage() {
     setDeletingId(school.code);
     try {
       await api.schools.remove(school.code);
+      setRemovedCodes(prev => new Set(prev).add(school.code));
       setRev(r => r + 1);
     } catch (e) {
-      setDeleteError(e.message);
+      try {
+        const impact = await api.schools.deleteImpact(school.code);
+        const detail = formatDeleteImpact(impact) || e.message;
+        const proceed = window.confirm(
+          `Safe delete is blocked for "${school.code}".\n\n${detail}\n\nForce delete will remove/deactivate linked accounts, role assignments, and school data for this school only.\n\nContinue with force delete?`
+        );
+        if (!proceed) {
+          setDeleteError(e.message);
+          return;
+        }
+        const typed = window.prompt(`Type ${school.code} to permanently force delete this school and its linked data.`);
+        if (typed !== school.code) {
+          setDeleteError('Force delete cancelled. School code confirmation did not match.');
+          return;
+        }
+        await api.schools.forceRemove(school.code);
+        setRemovedCodes(prev => new Set(prev).add(school.code));
+        setRev(r => r + 1);
+      } catch (forceErr) {
+        setDeleteError(forceErr.message || e.message);
+      }
     } finally {
       setDeletingId(null);
     }

@@ -259,6 +259,8 @@ const schools = {
   create: (data)         => request('/admin/schools', { method: 'POST', body: JSON.stringify(data) }),
   update: (code, data)   => request(`/admin/schools/${encodeURIComponent(code)}`, { method: 'PUT', body: JSON.stringify(data) }),
   remove: (code)         => request(`/admin/schools/${encodeURIComponent(code)}`, { method: 'DELETE' }),
+  deleteImpact: (code)   => request(`/admin/schools/${encodeURIComponent(code)}/delete-impact`),
+  forceRemove: (code)    => request(`/admin/schools/${encodeURIComponent(code)}?force=true`, { method: 'DELETE' }),
 }
 
 // ---------------------------------------------------------------------------
