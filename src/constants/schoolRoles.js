@@ -11,18 +11,21 @@ export const SCHOOL_CHAIN_CATALOG = [
   { key: 'hod',      label: 'HOD',      icon: I.users,  color: '#a78bfa', locked: false, requires: 'has_hod' },
   { key: 'director', label: 'Director', icon: I.key,    color: '#fbbf24', locked: false, requires: 'has_director' },
   { key: 'dean',     label: 'Dean',     icon: I.star,   color: '#34d399', locked: false, requires: null },
+  { key: 'center_head', label: 'Center Head', icon: I.layers, color: '#fb923c', locked: false, requiresTrack: 'cisr' },
   { key: 'vc',       label: 'VC',       icon: I.shield, color: '#f472b6', locked: true,  requires: null },
 ];
 
 export const SCHOOL_CHAIN_MAP = Object.fromEntries(SCHOOL_CHAIN_CATALOG.map(s => [s.key, s]));
 
 export function deanLabelForTrack(track) {
+  if (track === 'cisr') return 'Center Head';
   return track === 'engineering' ? 'Dean (Engineering)' : 'Dean (Non-Engineering)';
 }
 
 // Sensible starting chain derived from the two toggles — admin can still
 // reorder or remove any non-locked step afterwards.
-export function defaultChainFor(hasHod, hasDirector) {
+export function defaultChainFor(hasHod, hasDirector, track = 'engineering') {
+  if (track === 'cisr') return ['center_head', 'vc'];
   const chain = [];
   if (hasHod) chain.push('hod');
   if (hasDirector) chain.push('director');
@@ -34,6 +37,7 @@ export function defaultChainFor(hasHod, hasDirector) {
 export const SCHOOL_TRACKS = [
   { value: 'engineering',     label: 'Engineering',     icon: I.bldg,   color: '#3b82f6', desc: 'Routes to the Dean of Engineering' },
   { value: 'non_engineering', label: 'Non-Engineering', icon: I.school, color: '#34d399', desc: 'Routes to the Dean of Non-Engineering' },
+  { value: 'cisr',            label: 'CISR / Center',   icon: I.layers, color: '#fb923c', desc: 'Routes through Center Head to VC' },
 ];
 
 // Appraisal forms a school can be assigned. This list is expected to grow — treat

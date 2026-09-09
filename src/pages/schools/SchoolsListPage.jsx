@@ -29,6 +29,12 @@ function Alert({ msg, color = C.red }) {
 }
 
 function chainLabelsFor(school) {
+  if (school.code === 'CISR' || school.track === 'cisr') {
+    return [
+      { key: 'center_head', label: 'Center Head', color: '#fb923c', icon: I.layers },
+      { key: 'vc', label: 'VC', color: '#f472b6', icon: I.shield },
+    ];
+  }
   const chain = school.approval_chain?.length ? school.approval_chain : ['dean', 'vc'];
   return chain.map(k => ({
     key: k,
@@ -128,7 +134,9 @@ function EditSchoolModal({ school, onClose, onSaved }) {
 // ── School row card ───────────────────────────────────────────────────────────
 function SchoolCard({ school, onRefresh, onDelete, isDeleting }) {
   const [editing, setEditing] = useState(false);
-  const trackMeta = SCHOOL_TRACKS.find(t => t.value === school.track) ?? SCHOOL_TRACKS[0];
+  const trackMeta = school.track === 'cisr'
+    ? { value: 'cisr', label: 'Center', icon: I.layers, color: '#fb923c' }
+    : (SCHOOL_TRACKS.find(t => t.value === school.track) ?? SCHOOL_TRACKS[0]);
   const TrackIcon = trackMeta.icon;
   const inactive = school.active === false;
   const nodes = [
@@ -171,7 +179,7 @@ function SchoolCard({ school, onRefresh, onDelete, isDeleting }) {
               <span style={{ fontSize: 13.5, color: C.text, fontWeight: 700 }}>{school.full_name}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
-              <Badge color={school.track === 'engineering' ? 'blue' : 'green'}>{trackMeta.label}</Badge>
+              <Badge color={school.track === 'engineering' ? 'blue' : school.track === 'cisr' ? 'orange' : 'green'}>{trackMeta.label}</Badge>
               {school.has_hod && <Badge color="purple">Has HOD</Badge>}
               {!school.has_director && <Badge color="yellow">No Director</Badge>}
               {inactive && <Badge color="gray">Inactive</Badge>}

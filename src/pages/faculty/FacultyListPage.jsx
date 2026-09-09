@@ -340,6 +340,9 @@ const UserRow = memo(function UserRow({ f, selected, onSelect, onEdit, onToggle,
   const rm       = roleMeta(f.role);
   const isActive = f.status === 'Active';
   const isNT     = f.role === 'non_teaching_staff';
+  const schoolLabel = f.schoolLabel && !['-', '—', 'â€”'].includes(f.schoolLabel)
+    ? f.schoolLabel
+    : null;
 
   return (
     <div
@@ -416,10 +419,10 @@ const UserRow = memo(function UserRow({ f, selected, onSelect, onEdit, onToggle,
 
       {/* School / Dept */}
       <div style={{ minWidth: 0, paddingRight: 10 }}>
-        {f.school !== '—' ? (
+        {schoolLabel ? (
           <>
             <div style={{ fontSize: 12, fontWeight: 700, color: C.accent, fontFamily: "'JetBrains Mono',monospace", overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-              {f.school}
+              {schoolLabel}
             </div>
             {f.dept !== '—' && (
               <div style={{ fontSize: 11, color: C.muted, marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
@@ -490,7 +493,7 @@ export default function FacultyListPage() {
   const rows = useMemo(() => {
     const q = search.toLowerCase();
     return users.filter(f =>
-      (selectedSchools.size === 0 || selectedSchools.has(f.school)) &&
+      (selectedSchools.size === 0 || (f.schools ?? [f.school]).some(s => selectedSchools.has(s))) &&
       (selectedRoles.size === 0   || selectedRoles.has(f.role))     &&
       (statusFilter === 'All'     || f.status === statusFilter)      &&
       (!q || f.name.toLowerCase().includes(q) || f.email.toLowerCase().includes(q))
@@ -582,7 +585,10 @@ export default function FacultyListPage() {
   // Print
   const handlePrint = () => {
     const now = new Date().toLocaleString('en-US', { month: 'long', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' });
-    const tableRows = rows.map((f, i) => `<tr class="${i % 2 ? 'alt' : ''}"><td class="num">${i + 1}</td><td><div class="name">${f.name}</div><div class="em">${f.email}</div></td><td><span class="badge">${roleMeta(f.role).label}</span></td><td>${f.school !== '—' ? f.school : '—'}</td><td>${f.dept !== '—' ? f.dept : '—'}</td><td><span class="s ${f.status === 'Active' ? 'act' : 'inact'}">${f.status}</span></td></tr>`).join('');
+    const tableRows = rows.map((f, i) => {
+      const schoolLabel = f.schoolLabel && !['-', '—', 'â€”'].includes(f.schoolLabel) ? f.schoolLabel : '—';
+      return `<tr class="${i % 2 ? 'alt' : ''}"><td class="num">${i + 1}</td><td><div class="name">${f.name}</div><div class="em">${f.email}</div></td><td><span class="badge">${roleMeta(f.role).label}</span></td><td>${schoolLabel}</td><td>${f.dept !== '—' ? f.dept : '—'}</td><td><span class="s ${f.status === 'Active' ? 'act' : 'inact'}">${f.status}</span></td></tr>`;
+    }).join('');
     const w = window.open('', '_blank', 'width=960,height=720');
     w.document.write(`<!DOCTYPE html><html><head><title>User List</title><style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:-apple-system,sans-serif;color:#111;font-size:12px;background:#fff}.page{padding:28px 32px}h1{font-size:17px;font-weight:800;margin-bottom:4px}.sub{font-size:11px;color:#6b7280;margin-bottom:18px}table{width:100%;border-collapse:collapse}thead tr{background:#f9fafb}th{padding:7px 10px;font-size:9px;font-weight:700;color:#6b7280;text-transform:uppercase;text-align:left;border-bottom:2px solid #e5e7eb}td{padding:7px 10px;border-bottom:1px solid #f3f4f6;vertical-align:top}tr.alt td{background:#fafafa}.num{text-align:center;color:#9ca3af;width:28px}.name{font-weight:700}.em{font-size:10px;color:#6b7280;font-family:monospace}.badge{display:inline-block;padding:2px 7px;border-radius:10px;background:#eff6ff;color:#1d4ed8;border:1px solid #bfdbfe;font-size:9px;font-weight:700}.s{display:inline-block;padding:2px 7px;border-radius:10px;font-size:9px;font-weight:700}.act{background:#f0fdf4;color:#15803d;border:1px solid #bbf7d0}.inact{background:#fff7ed;color:#c2410c;border:1px solid #fed7aa}@media print{@page{margin:10mm;size:A4 landscape}}</style></head><body><div class="page"><h1>User List — DYP Faculty Appraisal</h1><div class="sub">Generated: ${now} · ${rows.length} records</div><table><thead><tr><th>#</th><th>Name / Email</th><th>Role</th><th>School</th><th>Dept</th><th>Status</th></tr></thead><tbody>${tableRows}</tbody></table></div></body></html>`);
     w.document.close(); w.focus(); setTimeout(() => w.print(), 400);

@@ -51,6 +51,16 @@ export function normalizeStats(raw) {
 // ---------------------------------------------------------------------------
 // Users  →  GET /api/v1/admin/users
 // ---------------------------------------------------------------------------
+function normalizeSchoolList(u) {
+  const rawList = u.assigned_schools ?? u.schools ?? [];
+  const arrList = Array.isArray(rawList)
+    ? rawList
+    : String(rawList || '').split(',');
+  const codes = arrList.map(s => String(s).trim()).filter(Boolean);
+  const primary = u.school ? String(u.school).trim() : '';
+  return [...new Set([primary, ...codes].filter(Boolean))];
+}
+
 export function normalizeUsers(raw, isSuperAdmin = false) {
   raw = raw ?? [];
   const arr = Array.isArray(raw) ? raw : (raw.users ?? raw.items ?? []);
@@ -66,7 +76,9 @@ export function normalizeUsers(raw, isSuperAdmin = false) {
       name:        u.full_name ?? u.name ?? u.email,
       email:       u.email,
       dept:        u.department ?? u.dept ?? '—',
-      school:      u.school ?? '—',
+      school:      normalizeSchoolList(u)[0] ?? '-',
+      schools:     normalizeSchoolList(u),
+      schoolLabel: normalizeSchoolList(u).length ? normalizeSchoolList(u).join(', ') : '-',
       role:        u.appraisal_role ?? 'faculty',
       designation: u.designation ?? '—',
       employeeId:  u.employee_id ?? '—',

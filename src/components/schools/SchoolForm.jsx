@@ -5,7 +5,7 @@ import { I } from '../../components/icons';
 import Toggle from '../../components/Toggle';
 import {
   SCHOOL_CHAIN_CATALOG, SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, SCHOOL_FORMS,
-  deanLabelForTrack,
+  deanLabelForTrack, defaultChainFor,
 } from '../../constants/schoolRoles';
 
 // ── Section heading — icon tile + label, matches the rest of the app ──────────
@@ -31,10 +31,10 @@ export function SL({ icon: Icon, color = C.accent, children, sub }) {
   );
 }
 
-// ── Track picker — icon tile choice card ────────────────────────────────────────
+// ── School / center type picker — icon tile choice card ─────────────────────────
 export function TrackPicker({ value, onChange }) {
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(230px, 1fr))', gap: 10 }}>
       {SCHOOL_TRACKS.map(t => {
         const active = value === t.value;
         const TIcon = t.icon;
@@ -114,6 +114,9 @@ export function ChainBuilder({ chain, onChange, track, hasHod, hasDirector, onTo
 
   const available = SCHOOL_CHAIN_CATALOG.filter(s => {
     if (chain.includes(s.key)) return false;
+    if (track === 'cisr' && !['center_head', 'vc'].includes(s.key)) return false;
+    if (track !== 'cisr' && s.key === 'center_head') return false;
+    if (s.requiresTrack && s.requiresTrack !== track) return false;
     if (s.requires === 'has_hod' && !hasHod) return false;
     if (s.requires === 'has_director' && !hasDirector) return false;
     return true;
@@ -435,8 +438,25 @@ export const EMPTY_SCHOOL = {
 
 export default function SchoolForm({ value, onChange, isEdit = false }) {
   const set = (k, v) => onChange({ ...value, [k]: v });
+  const isCisr = value.track === 'cisr';
 
-  function setTrack(track) { onChange({ ...value, track }); }
+  function setTrack(track) {
+    if (track === 'cisr') {
+      onChange({
+        ...value,
+        track,
+        has_hod: false,
+        has_director: false,
+        approval_chain: defaultChainFor(false, false, track),
+      });
+      return;
+    }
+    onChange({
+      ...value,
+      track,
+      approval_chain: defaultChainFor(value.has_hod, value.has_director, track),
+    });
+  }
 
   function setToggle(key, requiresKey, on) {
     let chain = [...value.approval_chain];
@@ -478,7 +498,7 @@ export default function SchoolForm({ value, onChange, isEdit = false }) {
       </div>
 
       <div>
-        <SL icon={I.world} color="#818cf8">Academic Track</SL>
+        <SL icon={I.world} color="#818cf8">School / Center Type</SL>
         <TrackPicker value={value.track} onChange={setTrack} />
       </div>
 
@@ -486,6 +506,15 @@ export default function SchoolForm({ value, onChange, isEdit = false }) {
         <SL icon={I.layers} color="#a78bfa" sub="Faculty in this school pass through these layers before the Dean">
           Organisational Layers
         </SL>
+        {isCisr ? (
+          <div style={{
+            padding: '11px 14px', borderRadius: 11,
+            background: 'rgba(251,146,60,.07)', border: '1px solid rgba(251,146,60,.22)',
+            color: C.subtle, fontSize: 12, lineHeight: 1.5,
+          }}>
+            CISR / Center entries use Center Head followed by VC. HOD and Director layers are not used.
+          </div>
+        ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           <ToggleRow
             icon={I.users} color="#a78bfa"
@@ -502,6 +531,7 @@ export default function SchoolForm({ value, onChange, isEdit = false }) {
             onChange={v => setToggle('has_director', 'director', v)}
           />
         </div>
+        )}
       </div>
 
       <div>

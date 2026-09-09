@@ -45,6 +45,7 @@ const STEPS = [
 const EMPTY = {
   full_name: '', email: '', password: 'demo123',
   school: '', department: '', appraisal_role: '',
+  schools: [],
   designation: '', phone: '', qualification: '', teaching_experience: '',
   workflow_template_id: '',
   reporting_officer_email: '',
@@ -545,6 +546,122 @@ function InfoBox({ color, children }) {
       border: `1px solid rgba(${rgb},.18)`,
     }}>
       {children}
+    </div>
+  );
+}
+
+function SchoolChip({ code, label, color = C.accent, onRemove }) {
+  return (
+    <span style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6,
+      padding: '4px 7px 4px 10px', borderRadius: 20,
+      background: `${color}12`, border: `1px solid ${color}30`,
+      color, fontSize: 11, fontWeight: 700,
+    }}>
+      <span style={{ fontFamily: "'JetBrains Mono',monospace" }}>{code}</span>
+      {label && <span style={{ color: C.muted, fontWeight: 500 }}>{label}</span>}
+      {onRemove && (
+        <button
+          type="button"
+          className="act-btn"
+          onClick={onRemove}
+          title={`Remove ${code}`}
+          style={{
+            width: 16, height: 16, borderRadius: '50%', border: 'none',
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+            cursor: 'pointer', background: 'rgba(248,113,113,.12)', color: C.red, padding: 0,
+          }}
+        >
+          <I.x size={9} />
+        </button>
+      )}
+    </span>
+  );
+}
+
+function DirectorSchoolMultiSelect({ schools, selected, onChange, trackLabel }) {
+  const selectedSet = new Set(selected);
+  const allSelected = schools.length > 0 && schools.every(s => selectedSet.has(s.code));
+  const color = C.yellow;
+
+  function toggle(code) {
+    const next = selectedSet.has(code)
+      ? selected.filter(c => c !== code)
+      : [...selected, code];
+    onChange(next);
+  }
+
+  function setAll() {
+    onChange(allSelected ? [] : schools.map(s => s.code));
+  }
+
+  return (
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, alignItems: 'center', marginBottom: 10 }}>
+        <SL>Director Schools</SL>
+        <span style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap' }}>
+          {selected.length} school{selected.length === 1 ? '' : 's'} assigned
+        </span>
+      </div>
+
+      {schools.length > 1 && (
+        <button
+          type="button"
+          className="act-btn"
+          onClick={setAll}
+          style={{ ...oBtn, padding: '6px 10px', fontSize: 11, marginBottom: 10 }}
+        >
+          {allSelected ? 'Clear all' : `Select all ${trackLabel}`}
+        </button>
+      )}
+
+      <div style={{
+        display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
+        gap: 8, marginBottom: selected.length ? 12 : 0,
+      }}>
+        {schools.map(s => {
+          const checked = selectedSet.has(s.code);
+          return (
+            <label
+              key={s.code}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, padding: '10px 12px',
+                borderRadius: 10, cursor: 'pointer',
+                border: `1.5px solid ${checked ? `${color}66` : 'rgba(255,255,255,.07)'}`,
+                background: checked ? `${color}10` : 'rgba(255,255,255,.02)',
+              }}
+            >
+              <input
+                type="checkbox"
+                checked={checked}
+                onChange={() => toggle(s.code)}
+                style={{ width: 15, height: 15, accentColor: color, flexShrink: 0 }}
+              />
+              <span style={{ fontFamily: "'JetBrains Mono',monospace", fontSize: 12, fontWeight: 800, color }}>
+                {s.code}
+              </span>
+              <span style={{ fontSize: 11.5, color: C.subtle, lineHeight: 1.35 }}>{s.full}</span>
+            </label>
+          );
+        })}
+      </div>
+
+      {selected.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
+          {selected.map(code => {
+            const s = schools.find(x => x.code === code);
+            return (
+              <SchoolChip
+                key={code}
+                code={code}
+                label={s?.full}
+                color={color}
+                onRemove={() => toggle(code)}
+              />
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1297,6 +1414,7 @@ export default function AddFacultyPage() {
   const isCISR        = track === 'cisr';
   const role          = form.appraisal_role;
   const school        = form.school;
+  const directorSchools = Array.isArray(form.schools) ? form.schools : [];
   const dept          = form.department;
 
   const availRoles = isCISR       ? CISR_ROLES
@@ -1325,11 +1443,14 @@ export default function AddFacultyPage() {
   const selectedSchoolObj = schoolByCode(school);
   const schoolLocked      = role === 'hod' && hodSchools.length === 1;
   const groupSchools      = role === 'hod' ? hodSchools : trackSchools;
-  const showSchoolPicker  = (isEngineering || isNonEng) && !!role && role !== 'dean' && !schoolLocked;
+  const showSchoolPicker  = (isEngineering || isNonEng) && !!role && role !== 'dean' && role !== 'director' && !schoolLocked;
   const showDeptFixed     = (role === 'faculty' || role === 'hod') && selectedSchoolObj?.departments?.length > 0;
   const showDeptText      = role === 'faculty' && !!school && !(selectedSchoolObj?.departments?.length > 0) && (isEngineering || isNonEng);
 
-  const flowNodes = computeFlow(staffType, track, role, school, dept, selectedSchoolObj?.hasHod);
+  const directorSchoolLabel = role === 'director' && directorSchools.length > 0
+    ? directorSchools.join(', ')
+    : school;
+  const flowNodes = computeFlow(staffType, track, role, directorSchoolLabel, dept, selectedSchoolObj?.hasHod);
 
   // Dynamic NT workflow — fetched from API, falls back gracefully if unavailable
   const { steps: ntWorkflowSteps, loading: ntWorkflowLoading } = useWorkflowTemplate(
@@ -1374,7 +1495,7 @@ export default function AddFacultyPage() {
       ['Email',        r.email],
       ['Role',         r.role],
       ['Staff Type',   r.staffType],
-      r.school             && ['School',      r.school],
+      r.school             && [r.role === 'Director' && String(r.school).includes(',') ? 'Schools' : 'School', r.school],
       r.department         && ['Department',  r.department],
       r.designation        && ['Designation', r.designation],
       r.phone              && ['Phone',       r.phone],
@@ -1428,13 +1549,13 @@ export default function AddFacultyPage() {
     setNtFirstReviewerType('ro');
     setNtRegRequired(true);
     setRoViaRegistrar(true);
-    setForm(p => ({ ...p, appraisal_role: '', school: '', department: '', workflow_template_id: '', reporting_officer_email: '', registrar_email: '' }));
+    setForm(p => ({ ...p, appraisal_role: '', school: '', schools: [], department: '', workflow_template_id: '', reporting_officer_email: '', registrar_email: '' }));
   };
   const handleTrack = (t) => {
     setTrack(t);
     setErr(null);
     // CISR has only one school — auto-assign it immediately
-    setForm(p => ({ ...p, appraisal_role: '', school: t === 'cisr' ? 'CISR' : '', department: '' }));
+    setForm(p => ({ ...p, appraisal_role: '', school: t === 'cisr' ? 'CISR' : '', schools: [], department: '' }));
   };
   const handleSchool = (code) => {
     setForm(p => ({
@@ -1445,8 +1566,17 @@ export default function AddFacultyPage() {
       appraisal_role: p.appraisal_role === 'hod' && !hodSchools.some(s => s.code === code) ? 'faculty' : p.appraisal_role,
     }));
   };
+  const handleDirectorSchools = (codes) => {
+    const unique = [...new Set(codes)].filter(code => trackSchools.some(s => s.code === code));
+    setForm(p => ({
+      ...p,
+      schools: unique,
+      school: unique[0] || '',
+      department: '',
+    }));
+  };
   const handleRole = (val) => {
-    const update = { appraisal_role: val, department: '', workflow_template_id: '', reporting_officer_email: '', registrar_email: '' };
+    const update = { appraisal_role: val, school: '', schools: [], department: '', workflow_template_id: '', reporting_officer_email: '', registrar_email: '' };
     if (val === 'hod')  update.school = hodSchools.length === 1 ? hodSchools[0].code : '';
     if (val === 'dean') update.school = track;
     setForm(p => ({ ...p, ...update }));
@@ -1470,7 +1600,9 @@ export default function AddFacultyPage() {
     }
     if (step === 1) {
       if (!role) return 'Please select a role.';
-      if ((isEngineering || isNonEng) && role !== 'dean' && !schoolLocked && !school)
+      if ((isEngineering || isNonEng) && role === 'director' && directorSchools.length === 0)
+        return 'Please select at least one school for this Director.';
+      if ((isEngineering || isNonEng) && role !== 'dean' && role !== 'director' && !schoolLocked && !school)
         return 'Please select a school.';
       if (role === 'hod' && !dept)
         return 'Please select a department for this HOD position.';
@@ -1507,7 +1639,7 @@ export default function AddFacultyPage() {
       // Build clean payload — strip empty strings to null, set reports_to_registrar
       const isNtStaff = isNonTeaching && role === 'non_teaching_staff';
       const isNtRO    = isNonTeaching && role === 'reporting_officer';
-      const createPayload = isNtStaff
+      let createPayload = isNtStaff
         ? {
             ...form,
             reports_to_registrar: !ntDirectVC && !ntHasFirstReviewer,
@@ -1530,6 +1662,14 @@ export default function AddFacultyPage() {
             reporting_officer_email: form.reporting_officer_email || null,
             registrar_email:         form.registrar_email         || null,
           };
+      if (role === 'director') {
+        createPayload = {
+          ...createPayload,
+          school: directorSchools[0] || '',
+          schools: directorSchools,
+          assigned_schools: directorSchools,
+        };
+      }
       await api.users.create(createPayload);
       logAction('user_created', 'User Created', `${form.full_name || form.email} (${form.appraisal_role})`, { name: form.full_name, email: form.email, role: form.appraisal_role });
       if (staffType === 'non_teaching' && form.workflow_template_id) {
@@ -1543,7 +1683,7 @@ export default function AddFacultyPage() {
         email:              form.email,
         role:               roleMeta?.label ?? role,
         staffType:          staffType === 'teaching' ? 'Teaching' : (staffType === 'system' ? 'System Role' : 'Non-Teaching'),
-        school:             school             || null,
+        school:             role === 'director' ? directorSchools.join(', ') : (school || null),
         department:         dept               || null,
         designation:        form.designation   || null,
         phone:              form.phone         || null,
@@ -2106,6 +2246,20 @@ export default function AddFacultyPage() {
       )}
 
       {/* ── School picker — dropdown (non-Dean, non-HOD) ── */}
+      {role === 'director' && (isEngineering || isNonEng) && (
+        <>
+          <InfoBox color="yellow">
+            Select every active school this Director should manage. Saving keeps one-school Directors working while also sending the full assigned school list to the backend.
+          </InfoBox>
+          <DirectorSchoolMultiSelect
+            schools={trackSchools}
+            selected={directorSchools}
+            onChange={handleDirectorSchools}
+            trackLabel={isEngineering ? 'engineering schools' : 'non-engineering schools'}
+          />
+        </>
+      )}
+
       {showSchoolPicker && (
         <div style={{ marginBottom: 18 }}>
           <SL>{role === 'hod' ? 'School with HOD' : isEngineering ? 'Engineering School' : 'Non-Engineering School'}</SL>
@@ -2270,7 +2424,7 @@ export default function AddFacultyPage() {
     { k: 'Category', v: staffType === 'teaching' ? 'Teaching' : staffType === 'non_teaching' ? 'Non-Teaching' : null },
     { k: 'Track',    v: track === 'engineering' ? 'Engineering' : track === 'non_engineering' ? 'Non-Engineering' : track === 'cisr' ? 'CISR' : null },
     { k: 'Role',     v: roleMeta?.label ?? null },
-    { k: 'School',   v: school || null },
+    { k: role === 'director' ? 'Schools' : 'School', v: role === 'director' ? (directorSchools.join(', ') || null) : (school || null) },
     { k: 'Dept',     v: dept   || null },
     { k: 'Name',     v: form.full_name || null },
     { k: 'Email',    v: form.email     || null },
@@ -2294,7 +2448,7 @@ export default function AddFacultyPage() {
     { k: 'Email',      v: receipt.email       },
     { k: 'Role',       v: receipt.role        },
     { k: 'Staff Type', v: receipt.staffType   },
-    receipt.school             && { k: 'School',      v: receipt.school             },
+    receipt.school             && { k: receipt.role === 'Director' && String(receipt.school).includes(',') ? 'Schools' : 'School', v: receipt.school },
     receipt.department         && { k: 'Department',  v: receipt.department         },
     receipt.designation        && { k: 'Designation', v: receipt.designation        },
     receipt.phone              && { k: 'Phone',       v: receipt.phone              },

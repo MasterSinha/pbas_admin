@@ -11,7 +11,7 @@ import {
 } from '../../components/schools/SchoolForm';
 import {
   SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, SCHOOL_FORMS,
-  deanLabelForTrack, suggestSchoolCode,
+  deanLabelForTrack, suggestSchoolCode, defaultChainFor,
 } from '../../constants/schoolRoles';
 
 const EMPTY_SCHOOL = {
@@ -22,7 +22,7 @@ const EMPTY_SCHOOL = {
 };
 
 const STEPS = [
-  { label: 'Identity',  sub: 'Name, code & track',       icon: I.bldg },
+  { label: 'Identity',  sub: 'Name, code & type',        icon: I.bldg },
   { label: 'Structure', sub: 'HOD, Director & depts',     icon: I.layers },
   { label: 'Chain',     sub: 'Approval order',            icon: I.workflow },
   { label: 'Form',      sub: 'Appraisal form & status',   icon: I.doc },
@@ -132,6 +132,11 @@ export default function AddSchoolPage() {
 
   async function handleSave() {
     setErr(null); setSaving(true);
+    if (school.track === 'cisr') {
+      setErr('CISR / Center is separate from Engineering and Non-Engineering. Backend must support a center/CISR school type before this can be created.');
+      setSaving(false);
+      return;
+    }
     try {
       await api.schools.create(school);
       setSuccess(school.code);
@@ -148,6 +153,7 @@ export default function AddSchoolPage() {
 
   const trackMeta = SCHOOL_TRACKS.find(t => t.value === school.track);
   const formMeta  = SCHOOL_FORMS.find(f => f.key === (school.default_form ?? 'standard'));
+  const isCisr = school.track === 'cisr';
 
   const chainSteps = school.approval_chain.map(k => ({
     key: k,
@@ -155,6 +161,24 @@ export default function AddSchoolPage() {
     color: SCHOOL_CHAIN_MAP[k]?.color ?? C.accent,
     icon: SCHOOL_CHAIN_MAP[k]?.icon ?? I.star,
   }));
+
+  function handleTrackChange(track) {
+    if (track === 'cisr') {
+      setSchool(p => ({
+        ...p,
+        track,
+        has_hod: false,
+        has_director: false,
+        approval_chain: defaultChainFor(false, false, track),
+      }));
+      return;
+    }
+    setSchool(p => ({
+      ...p,
+      track,
+      approval_chain: defaultChainFor(p.has_hod, p.has_director, track),
+    }));
+  }
 
   // ── Step renderers ────────────────────────────────────────────────────────
   const stepIdentity = () => (
@@ -209,8 +233,8 @@ export default function AddSchoolPage() {
       </div>
 
       <div style={{ marginTop: 18 }}>
-        <SL icon={I.world} color="#818cf8">Academic Track</SL>
-        <TrackPicker value={school.track} onChange={t => set('track', t)} />
+        <SL icon={I.world} color="#818cf8">School / Center Type</SL>
+        <TrackPicker value={school.track} onChange={handleTrackChange} />
       </div>
     </div>
   );
@@ -220,6 +244,15 @@ export default function AddSchoolPage() {
       <SL icon={I.layers} color="#a78bfa" sub="Faculty in this school pass through these layers before the Dean">
         Organisational Layers
       </SL>
+      {isCisr ? (
+        <div style={{
+          padding: '11px 14px', borderRadius: 11, marginBottom: 20,
+          background: 'rgba(251,146,60,.07)', border: '1px solid rgba(251,146,60,.22)',
+          color: C.subtle, fontSize: 12, lineHeight: 1.5,
+        }}>
+          CISR / Center entries use Center Head followed by VC. HOD and Director layers are not used.
+        </div>
+      ) : (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 20 }}>
         <ToggleRow
           icon={I.users} color="#a78bfa"
@@ -236,6 +269,7 @@ export default function AddSchoolPage() {
           onChange={v => setToggle('has_director', 'director', v)}
         />
       </div>
+      )}
 
       <SL icon={I.list} color="#22d3ee" sub="Optional — used for faculty department assignment">
         Departments
@@ -365,7 +399,7 @@ export default function AddSchoolPage() {
             {[
               { k: 'Code',   v: school.code || null, mono: true },
               { k: 'Name',   v: school.full_name || null },
-              { k: 'Track',  v: trackMeta?.label },
+              { k: 'Type',   v: trackMeta?.label },
               { k: 'HOD',    v: school.has_hod ? 'Yes' : 'No' },
               { k: 'Director', v: school.has_director ? 'Yes' : 'No' },
               { k: 'Departments', v: school.departments.length ? `${school.departments.length} added` : 'None' },
