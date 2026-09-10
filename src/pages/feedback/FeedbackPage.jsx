@@ -83,6 +83,51 @@ export default function FeedbackPage() {
                     {b.msg || '(no message)'}
                   </div>
 
+                  {b.hasAttachment && (
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      padding: '12px 14px',
+                      borderRadius: 8,
+                      background: 'rgba(59, 130, 246, 0.08)',
+                      border: '1px solid rgba(59, 130, 246, 0.2)',
+                      marginBottom: 20,
+                    }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 10, minWidth: 0 }}>
+                        <span style={{ fontSize: 18 }}>📎</span>
+                        <div style={{ minWidth: 0 }}>
+                          <div style={{ fontSize: 13, fontWeight: 600, color: C.text, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {b.attachmentFilename || 'Attachment'}
+                          </div>
+                          {b.attachmentSize && (
+                            <div style={{ fontSize: 11, color: C.muted }}>
+                              {(b.attachmentSize / 1024).toFixed(1)} KB
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                      <button
+                        className="act-btn"
+                        style={{
+                          padding: '7px 14px',
+                          fontSize: 12,
+                          fontWeight: 600,
+                          background: '#2563eb',
+                          color: '#ffffff',
+                          borderRadius: 6,
+                          border: 'none',
+                          cursor: 'pointer',
+                          flexShrink: 0,
+                          marginLeft: 12,
+                        }}
+                        onClick={() => api.feedback.downloadAttachment(b.id, b.attachmentFilename)}
+                      >
+                        Download
+                      </button>
+                    </div>
+                  )}
+
                   <button className="act-btn"
                     style={{ padding: '9px 18px', background: 'transparent', color: C.muted,
                       border: '1px solid var(--c-btn-border)', borderRadius: 8, cursor: 'pointer',
@@ -117,6 +162,7 @@ export default function FeedbackPage() {
                   <span style={{ fontSize: 11, color: C.muted }}>{b.user} · {b.date}</span>
                   <Badge color={catColor[b.cat] || 'gray'}>{b.cat}</Badge>
                   <Badge color={stColor[b.status] || 'gray'} dot>{b.status}</Badge>
+                  {b.hasAttachment && <Badge color="blue">📎 Attachment</Badge>}
                 </div>
               </div>
               <button className="act-btn" style={smBtn} onClick={() => openDetail(b.id)}>View</button>

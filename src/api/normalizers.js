@@ -101,17 +101,21 @@ export function normalizeFeedback(raw) {
   raw = raw ?? [];
   const arr = Array.isArray(raw) ? raw : (raw.items ?? raw.feedback ?? []);
   return arr.map(f => ({
-    id:      f.id,
-    user:    f.name ?? f.email ?? 'Unknown',
-    av:      (f.name ?? f.email ?? 'UK').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase(),
-    subject: f.subject ?? '',
-    msg:     f.message ?? f.description ?? '',
-    cat:     (f.category ?? '').toLowerCase() === 'bug' ? 'Bug' : 'Query',
-    date:    f.submitted_at
-               ? new Date(f.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
-               : '—',
-    status:  f.status
-               ? f.status.charAt(0).toUpperCase() + f.status.slice(1).replace(/_/g, ' ')
-               : 'Open',
+    id:                    f.id,
+    user:                  f.name ?? f.email ?? 'Unknown',
+    av:                    (f.name ?? f.email ?? 'UK').split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase(),
+    subject:               f.subject ?? '',
+    msg:                   f.message ?? f.description ?? '',
+    cat:                   (f.category ?? '').toLowerCase() === 'bug' ? 'Bug' : 'Query',
+    date:                  f.submitted_at
+                             ? new Date(f.submitted_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+                             : '—',
+    status:                f.status
+                             ? f.status.charAt(0).toUpperCase() + f.status.slice(1).replace(/_/g, ' ')
+                             : 'Open',
+    hasAttachment:         Boolean(f.has_attachment),
+    attachmentFilename:    f.attachment_filename ?? null,
+    attachmentSize:        f.attachment_size ?? null,
+    attachmentContentType: f.attachment_content_type ?? null,
   }));
 }

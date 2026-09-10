@@ -606,17 +606,20 @@ Send any subset of the keys listed in the GET response.
 
 ### `POST /api/v1/feedback`
 
-Public endpoint — any user (no token required) can submit feedback.
+Public endpoint — any user (no token required) can submit feedback. Supports both `application/json` and `multipart/form-data` (for optional file attachments).
 
-#### Request body
+#### Request payload
 
-| Field      | Type     | Required | Constraints                                          |
-|------------|----------|----------|------------------------------------------------------|
-| `email`    | `string` | Yes      | Valid email, max 254 chars                           |
-| `category` | `string` | Yes      | One of: `query`, `feedback`, `bug`, `suggestion`, `other` |
-| `subject`  | `string` | Yes      | Max 120 chars                                        |
-| `message`  | `string` | Yes      | Max 5000 chars                                       |
-| `name`     | `string` | No       | Submitter name, max 80 chars                         |
+Accepts JSON or multipart form fields:
+
+| Field        | Type            | Required | Constraints                                                   |
+|--------------|-----------------|----------|---------------------------------------------------------------|
+| `email`      | `string`        | Yes      | Valid email, max 254 chars                                    |
+| `category`   | `string`        | Yes      | One of: `query`, `feedback`, `bug`, `suggestion`, `other`     |
+| `subject`    | `string`        | Yes      | Max 120 chars                                                 |
+| `message`    | `string`        | Yes      | Max 5000 chars                                                |
+| `name`       | `string`        | No       | Submitter name, max 80 chars                                  |
+| `attachment` | `file (binary)` | No       | Max 5 MiB. Formats: PNG, JPEG, WebP, PDF, TXT, LOG            |
 
 ```json
 {
@@ -636,8 +639,14 @@ Public endpoint — any user (no token required) can submit feedback.
   "message": "Feedback saved.",
   "feedback": {
     "id": "uuid-string",
-    "status": "open",
-    "submitted_at": "2025-05-10T14:22:00Z"
+    "status": "new",
+    "submitted_at": "2025-05-10T14:22:00Z",
+    "has_attachment": true,
+    "attachment": {
+      "filename": "screenshot.png",
+      "content_type": "image/png",
+      "size": 124500
+    }
   }
 }
 ```
@@ -658,17 +667,21 @@ Admin only. Returns feedback items newest-first.
 
 #### Response `200` — array
 
-| Field          | Type             | Description                                           |
-|----------------|------------------|-------------------------------------------------------|
-| `id`           | `string`         | UUID                                                  |
-| `name`         | `string \| null` | Submitter's name (optional at submission time)        |
-| `email`        | `string`         | Submitter's email                                     |
-| `category`     | `string`         | `query`, `feedback`, `bug`, `suggestion`, or `other`  |
-| `subject`      | `string`         | Short description                                     |
-| `message`      | `string`         | Full message text                                     |
-| `status`       | `string`         | `open`, `in_review`, or `resolved`                    |
-| `ip_address`   | `string \| null` | Submitter's IP (admin visibility only)                |
-| `submitted_at` | `string`         | ISO 8601 datetime                                     |
+| Field                     | Type             | Description                                           |
+|---------------------------|------------------|-------------------------------------------------------|
+| `id`                      | `string`         | UUID                                                  |
+| `name`                    | `string \| null` | Submitter's name (optional at submission time)        |
+| `email`                   | `string`         | Submitter's email                                     |
+| `category`                | `string`         | `query`, `feedback`, `bug`, `suggestion`, or `other`  |
+| `subject`                 | `string`         | Short description                                     |
+| `message`                 | `string`         | Full message text                                     |
+| `status`                  | `string`         | `new`, `open`, `in_review`, or `resolved`             |
+| `ip_address`              | `string \| null` | Submitter's IP (admin visibility only)                |
+| `submitted_at`            | `string`         | ISO 8601 datetime                                     |
+| `has_attachment`          | `boolean`        | `true` if an attachment exists                        |
+| `attachment_filename`     | `string \| null` | Original filename                                     |
+| `attachment_size`         | `integer \| null`| Size in bytes                                         |
+| `attachment_content_type` | `string \| null` | MIME content type                                     |
 
 ```json
 [
@@ -679,9 +692,13 @@ Admin only. Returns feedback items newest-first.
     "category": "bug",
     "subject": "Form not saving",
     "message": "The appraisal form loses data on submit.",
-    "status": "open",
+    "status": "new",
     "ip_address": "103.x.x.x",
-    "submitted_at": "2025-05-08T10:30:00Z"
+    "submitted_at": "2025-05-08T10:30:00Z",
+    "has_attachment": true,
+    "attachment_filename": "screenshot.png",
+    "attachment_size": 124500,
+    "attachment_content_type": "image/png"
   }
 ]
 ```
@@ -695,6 +712,20 @@ Returns a single feedback entry (admin only). Same shape as list item, plus `use
 | Extra field  | Type     | Description                        |
 |--------------|----------|------------------------------------|
 | `user_agent` | `string` | Browser user-agent string (admin)  |
+
+---
+
+### `GET /api/v1/feedback/{feedback_id}/attachment`
+
+Admin only. Streams/downloads the submitted attachment file with `Content-Disposition: attachment; filename="<original_name>"`.
+
+#### Response `200`
+Binary file stream with the appropriate `Content-Type` (e.g. `image/png`, `application/pdf`).
+
+#### Errors
+- `401 Unauthorized` — missing / invalid token
+- `403 Forbidden` — non-admin role
+- `404 Not Found` — feedback ID does not exist, has no attachment, or file is not on disk
 
 ---
 

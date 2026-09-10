@@ -155,12 +155,28 @@ const marks = {
     request(`/dashboard/faculty/${encodeURIComponent(email)}?academic_year=${encodeURIComponent(academic_year)}`),
 }
 
-// ---------------------------------------------------------------------------
-// Feedback
-// ---------------------------------------------------------------------------
 const feedback = {
   list: (params = {}) => request('/feedback?' + new URLSearchParams(params)),
   get: (id) => request(`/feedback/${id}`),
+  downloadAttachment: async (id, filename) => {
+    const token = getToken()
+    const headers = {}
+    if (token) headers['Authorization'] = `Bearer ${token}`
+    const res = await fetch(`${BASE}/feedback/${id}/attachment`, { headers })
+    if (!res.ok) {
+      const err = await res.json().catch(() => null)
+      throw new Error(err?.detail || 'Failed to download attachment')
+    }
+    const blob = await res.blob()
+    const url = window.URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename || 'attachment'
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    window.URL.revokeObjectURL(url)
+  },
 }
 
 // ---------------------------------------------------------------------------
