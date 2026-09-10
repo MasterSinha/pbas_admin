@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { api } from '../api/client';
 import { SCHOOLS as LEGACY_SCHOOLS, SOEMR_DEPTS } from '../constants/schools';
+import { hydrateSchoolFormSelection } from '../constants/schoolRoles';
 
 // Normalizes a live /admin/schools row into the shape every school picker in
 // this app consumes: { code, full, track, hasHod, hasDirector, departments, active }
 function normalizeLive(s) {
+  s = hydrateSchoolFormSelection(s);
   return {
     code: s.code,
     full: s.full_name,
@@ -12,7 +14,8 @@ function normalizeLive(s) {
     hasHod: !!s.has_hod,
     hasDirector: s.has_director !== false,
     departments: Array.isArray(s.departments) ? s.departments : [],
-    defaultForm: s.default_form ?? 'standard',
+    defaultForm: s.defaultForm ?? s.default_form ?? 'standard',
+    formVariant: s.formVariant ?? s.form_variant ?? ((s.defaultForm ?? s.default_form) === 'creative' ? 'designArts' : 'standard'),
     active: s.active !== false,
   };
 }
@@ -28,6 +31,7 @@ function normalizeLegacy(s) {
     hasDirector: true,
     departments: s.code === 'SoEMR' ? SOEMR_DEPTS : [],
     defaultForm: 'standard',
+    formVariant: 'standard',
     active: true,
   };
 }

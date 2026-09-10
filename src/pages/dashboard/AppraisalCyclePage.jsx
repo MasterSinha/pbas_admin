@@ -17,6 +17,7 @@ import {
 // ── Stage maps (backend Declaration.status → pipeline key) ───────────────────
 
 const STAGE_KEY = {
+  'Pending HOD Review':      'hod',
   'Pending Review':          'hod',
   'Submitted':               'hod',
   'Pending Director Review': 'director',
@@ -24,6 +25,8 @@ const STAGE_KEY = {
   'Pending VC Review':       'vc',
   'Reviewed':                'done',
 };
+
+const normEmail = email => String(email || '').trim().toLowerCase();
 
 const NT_STAGE_KEY = {
   'Pending RO Review':          'ro',
@@ -427,10 +430,10 @@ export default function AppraisalCyclePage() {
     [raw?.academic_year],
     { interval: AUTO_REFRESH_INTERVAL },
   );
-  // Per-faculty submission status — reuse marks endpoint (returns email + status for all faculty)
+  // Per-faculty submission status for grouping names under each appraisal stage.
   const { data: rawSubs } = useFetch(
     () => raw?.academic_year
-      ? api.marks.list(raw.academic_year, '').catch(() => null)
+      ? api.submissions.list({ academic_year: raw.academic_year }).catch(() => null)
       : Promise.resolve(null),
     [raw?.academic_year],
     { interval: AUTO_REFRESH_INTERVAL },
@@ -442,7 +445,7 @@ export default function AppraisalCyclePage() {
 
   const subStatusMap = useMemo(() => {
     const map = {};
-    if (Array.isArray(rawSubs)) rawSubs.forEach(s => { if (s.email) map[s.email] = s.status; });
+    if (Array.isArray(rawSubs)) rawSubs.forEach(s => { if (s.email) map[normEmail(s.email)] = s.status; });
     return map;
   }, [rawSubs]);
 
@@ -454,7 +457,7 @@ export default function AppraisalCyclePage() {
     const arr = rawPending === null
       ? allUsers.filter(u => TEACHING_ROLES_SET.has(u.role))
       : (Array.isArray(rawPending) ? rawPending : []);
-    return new Set(arr.map(f => f.email));
+    return new Set(arr.map(f => normEmail(f.email)));
   }, [rawPending, allUsers]);
 
   const usersBySchool = useMemo(() => {
@@ -475,23 +478,25 @@ export default function AppraisalCyclePage() {
 
   const { ntCounts, ntUsers, ntPending, ntSubs, ntStageGroups, hasFacultyStatusNT } = useMemo(() => {
     const users   = allUsers.filter(u => NT_ROLES_SET.has(u.role));
-    const pend    = users.filter(u => pendingEmails.has(u.email));
+    const statusOf = u => subStatusMap[normEmail(u.email)];
+    const isPending = u => pendingEmails.has(normEmail(u.email));
+    const pend    = users.filter(isPending);
     const counts  = stageCounts(stats.nonTeachingPipeline, NT_STAGE_KEY);
     counts['not_submitted'] = pend.length;
-    const subs      = users.filter(u => !pendingEmails.has(u.email));
-    const hasStatus = subs.some(u => subStatusMap[u.email]);
+    const subs      = users.filter(u => !isPending(u));
+    const hasStatus = subs.some(u => statusOf(u));
     return {
       ntCounts: counts, ntUsers: users, ntPending: pend, ntSubs: subs, hasFacultyStatusNT: hasStatus,
       ntStageGroups: {
         not_submitted: pend,
         ro: hasStatus
-          ? subs.filter(u => ['Pending RO Review', 'Draft'].includes(subStatusMap[u.email]))
+          ? subs.filter(u => ['Pending RO Review', 'Draft'].includes(statusOf(u)))
           : [],
         registrar: hasStatus
-          ? subs.filter(u => ['Pending Registrar Review', 'Reporting Officer Reviewed'].includes(subStatusMap[u.email]))
+          ? subs.filter(u => ['Pending Registrar Review', 'Reporting Officer Reviewed'].includes(statusOf(u)))
           : [],
-        vc:   hasStatus ? subs.filter(u => subStatusMap[u.email] === 'Registrar Reviewed') : [],
-        done: hasStatus ? subs.filter(u => subStatusMap[u.email] === 'VC Approved')        : [],
+        vc:   hasStatus ? subs.filter(u => statusOf(u) === 'Registrar Reviewed') : [],
+        done: hasStatus ? subs.filter(u => statusOf(u) === 'VC Approved')        : [],
       },
     };
   }, [allUsers, pendingEmails, stats.nonTeachingPipeline, subStatusMap]);
@@ -509,13 +514,15 @@ export default function AppraisalCyclePage() {
     const hods        = users.filter(u => u.role === 'hod');
     const dirs        = users.filter(u => u.role === 'director');
     const centerHeads = users.filter(u => u.role === 'center_head');
-    const notSub      = faculty.filter(f =>  pendingEmails.has(f.email));
-    const subm        = faculty.filter(f => !pendingEmails.has(f.email));
+    const statusOf = u => subStatusMap[normEmail(u.email)];
+    const isPending = u => pendingEmails.has(normEmail(u.email));
+    const notSub      = faculty.filter(isPending);
+    const subm        = faculty.filter(f => !isPending(f));
 
     // All teaching-role members who have submitted (faculty + HOD + director + dean + center_head)
     // Used for stage name lists so HODs/Directors/Deans appear in VC Queue etc.
     const allTeachingSubm = users.filter(u =>
-      TEACHING_ROLES_SET.has(u.role) && !pendingEmails.has(u.email)
+      TEACHING_ROLES_SET.has(u.role) && !isPending(u)
     );
 
     const pipeline    = bySchoolPipeline[selectedSchool] ?? {};
@@ -529,7 +536,7 @@ export default function AppraisalCyclePage() {
     const col    = pct >= 80 ? `linear-gradient(90deg,${C.green},#059669)`
                  : pct >= 60 ? `linear-gradient(90deg,${C.accent},#2563eb)`
                  :             `linear-gradient(90deg,${C.yellow},#d97706)`;
-    const hasStatus = allTeachingSubm.some(u => subStatusMap[u.email]);
+    const hasStatus = allTeachingSubm.some(u => statusOf(u));
     const isEMR     = selectedSchool === 'SoEMR';
     const isCISR    = selectedSchool === 'CISR';
     return {
@@ -542,24 +549,24 @@ export default function AppraisalCyclePage() {
       stageGroups: {
         not_submitted: notSub,
         hod: isEMR && hasStatus
-          ? allTeachingSubm.filter(u => ['Pending Review', 'Submitted'].includes(subStatusMap[u.email]))
+          ? allTeachingSubm.filter(u => ['Pending HOD Review', 'Pending Review', 'Submitted'].includes(statusOf(u)))
           : [],
         center_head: isCISR && hasStatus
-          ? allTeachingSubm.filter(u => ['Submitted', 'Pending Center Head Review'].includes(subStatusMap[u.email]))
+          ? allTeachingSubm.filter(u => ['Submitted', 'Pending Center Head Review'].includes(statusOf(u)))
           : [],
         director: hasStatus && !isCISR
           ? allTeachingSubm.filter(u => isEMR
-              ? subStatusMap[u.email] === 'Pending Director Review'
-              : ['Pending Review', 'Submitted', 'Pending Director Review'].includes(subStatusMap[u.email]))
+              ? statusOf(u) === 'Pending Director Review'
+              : ['Pending Review', 'Submitted', 'Pending Director Review'].includes(statusOf(u)))
           : [],
         dean: hasStatus && !isCISR
-          ? allTeachingSubm.filter(u => subStatusMap[u.email] === 'Pending Dean Review')
+          ? allTeachingSubm.filter(u => statusOf(u) === 'Pending Dean Review')
           : [],
         vc:   hasStatus
-          ? allTeachingSubm.filter(u => subStatusMap[u.email] === 'Pending VC Review')
+          ? allTeachingSubm.filter(u => statusOf(u) === 'Pending VC Review')
           : [],
         done: hasStatus
-          ? allTeachingSubm.filter(u => subStatusMap[u.email] === 'Reviewed')
+          ? allTeachingSubm.filter(u => statusOf(u) === 'Reviewed')
           : [],
       },
     };
@@ -579,7 +586,7 @@ export default function AppraisalCyclePage() {
   const schoolQueueRow = (sc, col) => {
     const sPipeline = bySchoolPipeline[sc] ?? {};
     const sCounts   = stageCounts(sPipeline, getSchoolStageKey(sc));
-    const notSubCnt = (usersBySchool[sc] ?? []).filter(u => u.role === 'faculty' && pendingEmails.has(u.email)).length;
+    const notSubCnt = (usersBySchool[sc] ?? []).filter(u => u.role === 'faculty' && pendingEmails.has(normEmail(u.email))).length;
     const badges = [
       { k: 'not_submitted', n: notSubCnt,                  c: C.red     },
       // HOD queue only meaningful for SoEMR
@@ -750,9 +757,9 @@ export default function AppraisalCyclePage() {
                               </div>
                             </div>
                             <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
-                              background: pendingEmails.has(ch.email) ? 'rgba(248,113,113,.12)' : 'rgba(52,211,153,.1)',
-                              color: pendingEmails.has(ch.email) ? C.red : C.green }}>
-                              {pendingEmails.has(ch.email) ? 'Not Submitted' : 'Submitted'}
+                              background: pendingEmails.has(normEmail(ch.email)) ? 'rgba(248,113,113,.12)' : 'rgba(52,211,153,.1)',
+                              color: pendingEmails.has(normEmail(ch.email)) ? C.red : C.green }}>
+                              {pendingEmails.has(normEmail(ch.email)) ? 'Not Submitted' : 'Submitted'}
                             </span>
                           </div>
                         ))}
@@ -784,9 +791,9 @@ export default function AppraisalCyclePage() {
                               </div>
                             </div>
                             <span style={{ fontSize: 10, fontWeight: 600, padding: '2px 8px', borderRadius: 12,
-                              background: pendingEmails.has(dir.email) ? 'rgba(248,113,113,.12)' : 'rgba(52,211,153,.1)',
-                              color: pendingEmails.has(dir.email) ? C.red : C.green }}>
-                              {pendingEmails.has(dir.email) ? 'Not Submitted' : 'Submitted'}
+                              background: pendingEmails.has(normEmail(dir.email)) ? 'rgba(248,113,113,.12)' : 'rgba(52,211,153,.1)',
+                              color: pendingEmails.has(normEmail(dir.email)) ? C.red : C.green }}>
+                              {pendingEmails.has(normEmail(dir.email)) ? 'Not Submitted' : 'Submitted'}
                             </span>
                           </div>
                         ))}
@@ -801,8 +808,8 @@ export default function AppraisalCyclePage() {
                           {SOEMR_DEPTS.map(dept => {
                             const deptFac     = selFaculty.filter(f => f.dept === dept);
                             const deptHOD     = selHODs.find(h => h.dept === dept);
-                            const deptPending = deptFac.filter(f =>  pendingEmails.has(f.email));
-                            const deptSub     = deptFac.filter(f => !pendingEmails.has(f.email));
+                            const deptPending = deptFac.filter(f =>  pendingEmails.has(normEmail(f.email)));
+                            const deptSub     = deptFac.filter(f => !pendingEmails.has(normEmail(f.email)));
                             const deptCounts  = stageCounts(byDept[dept] ?? {}, STAGE_KEY);
                             const hodQ = deptCounts['hod'] ?? 0;
                             const dirQ = deptCounts['director'] ?? 0;
@@ -815,9 +822,9 @@ export default function AppraisalCyclePage() {
                                   <div style={{ fontSize: 10, color: '#a78bfa', marginBottom: 6 }}>
                                     HOD: {deptHOD.name}
                                     <span style={{ marginLeft: 5, padding: '1px 5px', borderRadius: 8,
-                                      background: pendingEmails.has(deptHOD.email) ? 'rgba(248,113,113,.12)' : 'rgba(52,211,153,.1)',
-                                      color: pendingEmails.has(deptHOD.email) ? C.red : C.green, fontSize: 9 }}>
-                                      {pendingEmails.has(deptHOD.email) ? 'pending' : 'submitted'}
+                                      background: pendingEmails.has(normEmail(deptHOD.email)) ? 'rgba(248,113,113,.12)' : 'rgba(52,211,153,.1)',
+                                      color: pendingEmails.has(normEmail(deptHOD.email)) ? C.red : C.green, fontSize: 9 }}>
+                                      {pendingEmails.has(normEmail(deptHOD.email)) ? 'pending' : 'submitted'}
                                     </span>
                                   </div>
                                 ) : (

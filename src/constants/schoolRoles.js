@@ -43,9 +43,96 @@ export const SCHOOL_TRACKS = [
 // Appraisal forms a school can be assigned. This list is expected to grow — treat
 // it as the seed of a future forms registry, not a hardcoded final set.
 export const SCHOOL_FORMS = [
-  { key: 'standard', label: 'Standard Appraisal', icon: I.doc,  color: '#3b82f6', desc: 'The default PBAS-style appraisal form used across most schools.' },
-  { key: 'creative', label: 'Creative Form',       icon: I.idea, color: '#f472b6', desc: 'Alternate form for design / creative disciplines (e.g. School of Design).' },
+  {
+    key: 'standard',
+    defaultForm: 'standard',
+    formVariant: 'standard',
+    formType: 'FORM_A',
+    aliases: ['standard', 'FORM_A'],
+    label: 'Standard Appraisal',
+    icon: I.doc,
+    color: '#3b82f6',
+    desc: 'The default PBAS-style appraisal form used across most schools.',
+  },
+  {
+    key: 'mediaCommunication',
+    defaultForm: 'creative',
+    formVariant: 'mediaCommunication',
+    formType: 'FORM_B',
+    aliases: ['mediaCommunication', 'FORM_B'],
+    label: 'Creative Appraisal - Media Communication',
+    icon: I.chat,
+    color: '#22d3ee',
+    desc: 'Creative appraisal variant for media and communication schools.',
+  },
+  {
+    key: 'designArts',
+    defaultForm: 'creative',
+    formVariant: 'designArts',
+    formType: 'FORM_C',
+    aliases: ['designArts', 'FORM_C', 'creative'],
+    label: 'Creative Appraisal - Design Arts',
+    icon: I.idea,
+    color: '#f472b6',
+    desc: 'Creative appraisal variant for design and applied arts schools.',
+  },
 ];
+
+export function selectedSchoolFormKey(school = {}) {
+  const defaultForm = school.defaultForm ?? school.default_form ?? 'standard';
+  const formVariant = school.formVariant ?? school.form_variant ?? (defaultForm === 'creative' ? 'designArts' : 'standard');
+  const formType = school.formType ?? school.form_type;
+  const matched = SCHOOL_FORMS.find(f =>
+    f.defaultForm === defaultForm && f.formVariant === formVariant
+    || f.aliases?.includes(formVariant)
+    || f.aliases?.includes(formType)
+    || f.aliases?.includes(defaultForm)
+  );
+  return matched?.key ?? 'standard';
+}
+
+export function schoolFormPayload(key) {
+  const form = SCHOOL_FORMS.find(f => f.key === key) ?? SCHOOL_FORMS[0];
+  return {
+    default_form: form.defaultForm,
+    defaultForm: form.defaultForm,
+    form_variant: form.formVariant,
+    formVariant: form.formVariant,
+    form_type: form.formType,
+    formType: form.formType,
+  };
+}
+
+export function schoolFormLabel(school = {}) {
+  const key = selectedSchoolFormKey(school);
+  return SCHOOL_FORMS.find(f => f.key === key)?.label ?? SCHOOL_FORMS[0].label;
+}
+
+const SCHOOL_FORM_CACHE_KEY = 'pbas_school_form_variants';
+
+export function cacheSchoolFormSelection(code, key) {
+  if (!code || typeof localStorage === 'undefined') return;
+  try {
+    const raw = localStorage.getItem(SCHOOL_FORM_CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) : {};
+    cache[code] = key;
+    localStorage.setItem(SCHOOL_FORM_CACHE_KEY, JSON.stringify(cache));
+  } catch {}
+}
+
+export function hydrateSchoolFormSelection(school = {}) {
+  const hasVariant = Boolean(school.formVariant ?? school.form_variant);
+  if (hasVariant || !school.code || typeof localStorage === 'undefined') return school;
+  try {
+    const raw = localStorage.getItem(SCHOOL_FORM_CACHE_KEY);
+    const cache = raw ? JSON.parse(raw) : {};
+    const cachedKey = cache[school.code];
+    if (!cachedKey) return school;
+    return { ...school, ...schoolFormPayload(cachedKey) };
+  } catch {
+    return school;
+  }
+}
 
 // ── Auto-suggest a short code from a full school name ──────────────────────────
 // e.g. "School of Bio-Engineering & Bio Science" -> "SoBES". Purely a starting

@@ -254,12 +254,13 @@ const workflow = {
 // Schools — dynamic school catalog (track, HOD/Director layers, approval chain)
 // ---------------------------------------------------------------------------
 const schools = {
-  list:         (params = {})    => request('/admin/schools?' + new URLSearchParams(params)),
+  list:         (params = {})    => request('/admin/schools' + (params && Object.keys(params).length ? '?' + new URLSearchParams(params) : '')),
   get:          (code)           => request(`/admin/schools/${encodeURIComponent(code)}`),
   create:       (data)           => request('/admin/schools', { method: 'POST', body: JSON.stringify(data) }),
   update:       (code, data)     => request(`/admin/schools/${encodeURIComponent(code)}`, { method: 'PUT', body: JSON.stringify(data) }),
-  deleteImpact: (code)           => request(`/admin/schools/${encodeURIComponent(code)}/delete-impact`),
   remove:       (code, force = false) => request(`/admin/schools/${encodeURIComponent(code)}${force ? '?force=true' : ''}`, { method: 'DELETE' }),
+  deleteImpact: (code)           => request(`/admin/schools/${encodeURIComponent(code)}/delete-impact`),
+  forceRemove:  (code)           => request(`/admin/schools/${encodeURIComponent(code)}?force=true`, { method: 'DELETE' }),
   formRegistry: ()               => request('/admin/schools/form-registry'),
 }
 

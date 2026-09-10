@@ -5,7 +5,7 @@ import { I } from '../../components/icons';
 import Toggle from '../../components/Toggle';
 import {
   SCHOOL_CHAIN_CATALOG, SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, SCHOOL_FORMS,
-  deanLabelForTrack, defaultChainFor,
+  deanLabelForTrack, defaultChainFor, selectedSchoolFormKey, schoolFormPayload,
 } from '../../constants/schoolRoles';
 
 // ── Section heading — icon tile + label, matches the rest of the app ──────────
@@ -433,7 +433,7 @@ export const EMPTY_SCHOOL = {
   code: '', full_name: '', track: 'engineering',
   has_hod: false, has_director: true,
   approval_chain: ['director', 'dean', 'vc'],
-  departments: [], default_form: 'standard', active: true,
+  departments: [], default_form: 'standard', form_variant: 'standard', active: true,
 };
 
 export default function SchoolForm({ value, onChange, isEdit = false }) {
@@ -559,7 +559,10 @@ export default function SchoolForm({ value, onChange, isEdit = false }) {
         <SL icon={I.doc} color="#f472b6" sub="Which appraisal form faculty in this school fill out">
           Appraisal Form
         </SL>
-        <FormPicker value={value.default_form ?? 'standard'} onChange={f => set('default_form', f)} />
+        <FormPicker
+          value={selectedSchoolFormKey(value)}
+          onChange={f => onChange({ ...value, ...schoolFormPayload(f) })}
+        />
       </div>
 
       <ToggleRow

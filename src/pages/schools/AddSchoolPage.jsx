@@ -12,13 +12,14 @@ import {
 import {
   SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, SCHOOL_FORMS,
   deanLabelForTrack, suggestSchoolCode, defaultChainFor,
+  selectedSchoolFormKey, schoolFormPayload, cacheSchoolFormSelection,
 } from '../../constants/schoolRoles';
 
 const EMPTY_SCHOOL = {
   code: '', full_name: '', track: 'engineering',
   has_hod: false, has_director: true,
   approval_chain: ['director', 'dean', 'vc'],
-  departments: [], default_form: 'standard', active: true,
+  departments: [], default_form: 'standard', form_variant: 'standard', active: true,
 };
 
 const STEPS = [
@@ -133,7 +134,12 @@ export default function AddSchoolPage() {
   async function handleSave() {
     setErr(null); setSaving(true);
     try {
-      await api.schools.create(school);
+      const formKey = selectedSchoolFormKey(school);
+      await api.schools.create({
+        ...school,
+        ...schoolFormPayload(formKey),
+      });
+      cacheSchoolFormSelection(school.code, formKey);
       setSuccess(school.code);
       setSchool(EMPTY_SCHOOL);
       setCodeTouched(false);
@@ -147,7 +153,7 @@ export default function AddSchoolPage() {
   }
 
   const trackMeta = SCHOOL_TRACKS.find(t => t.value === school.track);
-  const formMeta  = SCHOOL_FORMS.find(f => f.key === (school.default_form ?? 'standard'));
+  const formMeta  = SCHOOL_FORMS.find(f => f.key === selectedSchoolFormKey(school));
   const isCisr = school.track === 'cisr';
 
   const chainSteps = school.approval_chain.map(k => ({
@@ -295,7 +301,10 @@ export default function AddSchoolPage() {
         Appraisal Form
       </SL>
       <div style={{ marginBottom: 20 }}>
-        <FormPicker value={school.default_form ?? 'standard'} onChange={f => set('default_form', f)} />
+        <FormPicker
+          value={selectedSchoolFormKey(school)}
+          onChange={f => setSchool(p => ({ ...p, ...schoolFormPayload(f) }))}
+        />
       </div>
       <SL icon={I.check} color="#34d399">Status</SL>
       <ToggleRow
