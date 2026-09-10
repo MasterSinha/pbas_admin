@@ -132,11 +132,6 @@ export default function AddSchoolPage() {
 
   async function handleSave() {
     setErr(null); setSaving(true);
-    if (school.track === 'cisr') {
-      setErr('CISR / Center is separate from Engineering and Non-Engineering. Backend must support a center/CISR school type before this can be created.');
-      setSaving(false);
-      return;
-    }
     try {
       await api.schools.create(school);
       setSuccess(school.code);
