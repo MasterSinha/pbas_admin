@@ -6,6 +6,7 @@
 // based on the school's track — there is one Dean per track, not per school.
 
 import { I } from '../components/icons';
+import { getPublishedDynamicForms } from '../utils/dynamicFormRegistry';
 
 export const SCHOOL_CHAIN_CATALOG = [
   { key: 'hod',      label: 'HOD',      icon: I.users,  color: '#a78bfa', locked: false, requires: 'has_hod' },
@@ -78,11 +79,30 @@ export const SCHOOL_FORMS = [
   },
 ];
 
+// Built-in forms plus any admin-published forms from the Dynamic Form builder
+// (src/pages/forms/DynamicFormPage.jsx). Custom entries are browser-local
+// (localStorage) prototypes — see src/utils/dynamicFormRegistry.js for why.
+export function getAllSchoolForms() {
+  const custom = getPublishedDynamicForms().map(f => ({
+    key: `custom:${f.key}`,
+    defaultForm: 'custom',
+    formVariant: f.key,
+    formType: `CUSTOM_${f.key.toUpperCase()}`,
+    aliases: [f.key, `custom:${f.key}`],
+    label: f.label,
+    icon: I[f.iconName] || I.doc,
+    color: f.color || '#a78bfa',
+    desc: f.desc || 'Custom dynamic form — prototype, not yet rendered for faculty.',
+    custom: true,
+  }));
+  return [...SCHOOL_FORMS, ...custom];
+}
+
 export function selectedSchoolFormKey(school = {}) {
   const defaultForm = school.defaultForm ?? school.default_form ?? 'standard';
   const formVariant = school.formVariant ?? school.form_variant ?? (defaultForm === 'creative' ? 'designArts' : 'standard');
   const formType = school.formType ?? school.form_type;
-  const matched = SCHOOL_FORMS.find(f =>
+  const matched = getAllSchoolForms().find(f =>
     f.defaultForm === defaultForm && f.formVariant === formVariant
     || f.aliases?.includes(formVariant)
     || f.aliases?.includes(formType)
@@ -92,7 +112,8 @@ export function selectedSchoolFormKey(school = {}) {
 }
 
 export function schoolFormPayload(key) {
-  const form = SCHOOL_FORMS.find(f => f.key === key) ?? SCHOOL_FORMS[0];
+  const forms = getAllSchoolForms();
+  const form = forms.find(f => f.key === key) ?? forms[0];
   return {
     default_form: form.defaultForm,
     defaultForm: form.defaultForm,
@@ -105,7 +126,8 @@ export function schoolFormPayload(key) {
 
 export function schoolFormLabel(school = {}) {
   const key = selectedSchoolFormKey(school);
-  return SCHOOL_FORMS.find(f => f.key === key)?.label ?? SCHOOL_FORMS[0].label;
+  const forms = getAllSchoolForms();
+  return forms.find(f => f.key === key)?.label ?? forms[0].label;
 }
 
 const SCHOOL_FORM_CACHE_KEY = 'pbas_school_form_variants';

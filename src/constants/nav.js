@@ -40,6 +40,12 @@ export const NAV = [
     ],
   },
   {
+    label: "Dynamic Form", icon: I.edit,
+    children: [
+      { label: "Form Builder", icon: I.edit, path: "/forms/dynamic-form" },
+    ],
+  },
+  {
     label: "Feedback", icon: I.chat,
     children: [
       { label: "Queries & Bugs", icon: I.bug, path: "/feedback" },

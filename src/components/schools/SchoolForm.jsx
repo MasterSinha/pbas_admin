@@ -4,7 +4,7 @@ import { inp, lbl, oBtn } from '../../constants/styleTokens';
 import { I } from '../../components/icons';
 import Toggle from '../../components/Toggle';
 import {
-  SCHOOL_CHAIN_CATALOG, SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, SCHOOL_FORMS,
+  SCHOOL_CHAIN_CATALOG, SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, getAllSchoolForms,
   deanLabelForTrack, defaultChainFor, selectedSchoolFormKey, schoolFormPayload,
 } from '../../constants/schoolRoles';
 
@@ -310,9 +310,10 @@ function FlowArrow() {
 
 // ── Appraisal form picker ────────────────────────────────────────────────────
 export function FormPicker({ value, onChange }) {
+  const forms = getAllSchoolForms();
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-      {SCHOOL_FORMS.map(f => {
+      {forms.map(f => {
         const active = value === f.key;
         const FIcon = f.icon;
         return (
@@ -342,7 +343,18 @@ export function FormPicker({ value, onChange }) {
               <FIcon size={15} />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontWeight: 700, fontSize: 12.5, color: active ? f.color : C.text }}>{f.label}</div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <div style={{ fontWeight: 700, fontSize: 12.5, color: active ? f.color : C.text }}>{f.label}</div>
+                {f.custom && (
+                  <span style={{
+                    fontSize: 8.5, fontWeight: 800, letterSpacing: .4, textTransform: 'uppercase',
+                    color: C.muted, background: 'var(--c-soft-bg)', border: '1px solid var(--c-border)',
+                    borderRadius: 20, padding: '1px 6px',
+                  }}>
+                    Custom
+                  </span>
+                )}
+              </div>
               <div style={{ fontSize: 10.5, color: C.muted, marginTop: 2, lineHeight: 1.4 }}>{f.desc}</div>
             </div>
             <div style={{
@@ -361,7 +373,8 @@ export function FormPicker({ value, onChange }) {
         );
       })}
       <div style={{ fontSize: 10, color: C.muted, marginTop: 2 }}>
-        More form types can be added later — this list grows as new forms are built.
+        Custom forms are built in Dynamic Form → Form Builder. They're a design prototype —
+        selecting one here won't change what faculty see until it's wired up on the backend.
       </div>
     </div>
   );
