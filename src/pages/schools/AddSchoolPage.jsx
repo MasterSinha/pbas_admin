@@ -10,7 +10,7 @@ import {
   SL, TrackPicker, ToggleRow, ChainBuilder, DepartmentEditor, FormPicker,
 } from '../../components/schools/SchoolForm';
 import {
-  SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, SCHOOL_FORMS,
+  SCHOOL_CHAIN_MAP, SCHOOL_TRACKS, getAllSchoolForms,
   deanLabelForTrack, suggestSchoolCode, defaultChainFor,
   selectedSchoolFormKey, schoolFormPayload, cacheSchoolFormSelection,
 } from '../../constants/schoolRoles';
@@ -153,7 +153,7 @@ export default function AddSchoolPage() {
   }
 
   const trackMeta = SCHOOL_TRACKS.find(t => t.value === school.track);
-  const formMeta  = SCHOOL_FORMS.find(f => f.key === selectedSchoolFormKey(school));
+  const formMeta  = getAllSchoolForms().find(f => f.key === selectedSchoolFormKey(school));
   const isCisr = school.track === 'cisr';
 
   const chainSteps = school.approval_chain.map(k => ({

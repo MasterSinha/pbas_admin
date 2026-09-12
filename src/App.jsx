@@ -33,6 +33,8 @@ const CredentialDetailsPage = lazy(() => import('./pages/credentials/CredentialD
 const DesignationsPage      = lazy(() => import('./pages/workflow/DesignationsPage'))
 const WorkflowTemplatesPage = lazy(() => import('./pages/workflow/WorkflowTemplatesPage'))
 
+const DynamicFormPage       = lazy(() => import('./pages/forms/DynamicFormPage'))
+
 const FeedbackPage          = lazy(() => import('./pages/feedback/FeedbackPage'))
 const AnnouncementsPage     = lazy(() => import('./pages/announcements/AnnouncementsPage'))
 const SettingsPage          = lazy(() => import('./pages/settings/SettingsPage'))
@@ -108,6 +110,8 @@ export default function App() {
               <Route path="workflow/templates"    element={<WorkflowTemplatesPage />} />
 
               <Route path="analytics"           element={<Navigate to="/" replace />} />
+
+              <Route path="forms/dynamic-form"  element={<DynamicFormPage />}      />
 
               <Route path="feedback"            element={<FeedbackPage />}         />
               <Route path="announcements"       element={<AnnouncementsPage />}    />
