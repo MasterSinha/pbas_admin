@@ -1,5 +1,16 @@
 const canonicalType = type => type === 'conditionaltext' ? 'conditionalText' : type;
 
+// Deterministic stringify (keys sorted) so two objects built via different
+// spread/property orders still compare equal — used to detect whether a
+// section actually changed before re-sending it to the backend.
+function stableStringify(value) {
+  if (Array.isArray(value)) return `[${value.map(stableStringify).join(',')}]`;
+  if (value && typeof value === 'object') {
+    return `{${Object.keys(value).sort().map(k => `${JSON.stringify(k)}:${stableStringify(value[k])}`).join(',')}}`;
+  }
+  return JSON.stringify(value);
+}
+
 export function readField(field) {
   if (typeof field === 'string') return { id: field, key: field, label: field, type: 'text', active: true, isCustom: false, columns: [], options: [] };
   return {
@@ -46,68 +57,151 @@ export function formsFromSchemas(rows, metadata = {}) {
   });
 }
 
+// Shared by save() and diff() — builds, for every table that would be sent,
+// what its next payload would look like and whether that differs from what
+// the backend currently has stored for it (`current`, freshly fetched — never
+// a stale local snapshot, so this can't miss a change someone else made).
+function buildPlan(form, existing, activate) {
+  if (!form.backendFamily) throw new Error('Missing stable backend form identifier.');
+  for (const part of form.parts) {
+    if (!form.sections.some(s => s.part === part && s.fields.length)) throw new Error(`Create a table in "${part}" before saving. Empty parts are not supported by this backend.`);
+  }
+  const owned = existing.filter(r => r.form_family === form.backendFamily);
+  const codes = new Set(existing.map(r => r.code));
+  const keep = new Set();
+  const sections = [...form.sections].sort((a, b) => form.parts.indexOf(a.part) - form.parts.indexOf(b.part));
+  const entries = [];
+  let completed = 0;
+  for (const section of sections) {
+    if (!section.fields.length && !section.isCore) continue;
+    const code = section.backendCode || `${form.backendFamily}_${section.id}`;
+    const current = owned.find(r => r.code === code);
+    if (!current && codes.has(code)) throw new Error('Schema code belongs to another form.');
+    keep.add(code);
+    const orderedFields = [...section.fields].sort((a, b) => {
+      const order = form.tableOrder || [];
+      const rank = id => order.includes(id) ? order.indexOf(id) : order.length;
+      return rank(a.id) - rank(b.id);
+    });
+    const fields = orderedFields.map((f, fieldIndex) => ({
+      ...f, key: f.key || f.id,
+      // Trim stray leading/trailing spaces from typing — otherwise an invisible
+      // space difference makes this look "changed" on every save/diff forever.
+      label: typeof f.label === 'string' ? f.label.trim() : f.label,
+      // Explicit numeric position, not just array position — so any consumer
+      // (the faculty renderer included) can sort fields correctly even if a
+      // JSON round-trip somewhere doesn't preserve array order. Recomputed from
+      // the draft's actual current order on every save, so reordering in the
+      // builder always keeps this in sync — no separate step needed.
+      order: fieldIndex,
+      // A locked Faculty Score column that isn't individually "Fixed" has no
+      // maxMarks of its own — it follows the table's Total Marks (f.maxMarks).
+      // Resolve that here so the backend always receives a real number.
+      columns: (f.columns || []).map((c, colIndex) => ({
+        ...c, placeholder: c.placeholder ?? '',
+        name: typeof c.name === 'string' ? c.name.trim() : c.name,
+        order: colIndex,
+        maxMarks: !['number', 'integer'].includes(c.type) ? null
+          : c.locked && !c.fixedMax ? (f.maxMarks ?? null)
+          : (c.maxMarks ?? null),
+      })),
+    }));
+    // Plain "Save" now persists whatever the draft's own active state is — new
+    // sections default active:true (blankSection()/newSection()), so a table is
+    // visible to faculty as soon as it's saved, no separate Activate click needed.
+    // Explicit Activate/Deactivate still bulk-set the whole family, but an
+    // individually-retired section (active:false in the draft) stays retired
+    // even during a bulk Activate, so restoring one still requires the
+    // "Restore retired items" checkbox first.
+    const active = activate === undefined ? section.active !== false : activate && section.active !== false;
+    const payload = {
+      code, form_family: form.backendFamily, part: section.part,
+      section_key: section.sectionKey || code,
+      title: (fields.length === 1 ? fields[0].label || section.title : section.title || '').trim(),
+      max_marks: section.maxMarks ?? 0, active, order: completed,
+      tableOrder: form.tableOrder || [], fields,
+    };
+    let kind = 'create';
+    if (current) {
+      const unchanged =
+        current.title === payload.title &&
+        current.part === payload.part &&
+        (current.max_marks ?? 0) === payload.max_marks &&
+        (current.active !== false) === payload.active &&
+        (current.order ?? 0) === payload.order &&
+        stableStringify(current.tableOrder || current.table_order || []) === stableStringify(payload.tableOrder) &&
+        stableStringify(current.fields) === stableStringify(fields);
+      kind = unchanged ? 'unchanged' : 'update';
+    }
+    entries.push({ code, part: section.part, current, payload, fields, kind });
+    completed++;
+  }
+  const deletions = owned.filter(row => !keep.has(row.code));
+  return { entries, deletions };
+}
+
 export function createSchemaStore(api) {
   async function load(metadata) { return formsFromSchemas(await api.list(), metadata); }
-  async function save(form, { activate } = {}) {
-    if (!form.backendFamily) throw new Error('Missing stable backend form identifier.');
-    for (const part of form.parts) {
-      if (!form.sections.some(s => s.part === part && s.fields.length)) throw new Error(`Create a table in "${part}" before saving. Empty parts are not supported by this backend.`);
-    }
+  // Read-only preview of exactly what a Save would do right now, without
+  // sending anything — a GitHub-style diff of the family against its current
+  // backend state: which tables would be created / updated (and what
+  // specifically changed inside them) / deleted / left untouched.
+  async function diff(form, { activate } = {}) {
     const existing = await api.list();
     if (!Array.isArray(existing)) throw new Error('Could not verify existing schemas.');
-    const owned = existing.filter(r => r.form_family === form.backendFamily);
-    const codes = new Set(existing.map(r => r.code));
-    const keep = new Set();
-    const sections = [...form.sections].sort((a, b) => form.parts.indexOf(a.part) - form.parts.indexOf(b.part));
-    let completed = 0;
-    try {
-      for (const section of sections) {
-        if (!section.fields.length && !section.isCore) continue;
-        const code = section.backendCode || `${form.backendFamily}_${section.id}`;
-        const current = owned.find(r => r.code === code);
-        if (!current && codes.has(code)) throw new Error('Schema code belongs to another form.');
-        keep.add(code);
-        const orderedFields = [...section.fields].sort((a, b) => {
-          const order = form.tableOrder || [];
-          const rank = id => order.includes(id) ? order.indexOf(id) : order.length;
-          return rank(a.id) - rank(b.id);
-        });
-        const fields = orderedFields.map(f => ({
-          ...f, key: f.key || f.id,
-          // A locked Faculty Score column that isn't individually "Fixed" has no
-          // maxMarks of its own — it follows the table's Total Marks (f.maxMarks).
-          // Resolve that here so the backend always receives a real number.
-          columns: (f.columns || []).map(c => ({
-            ...c, placeholder: c.placeholder ?? '',
-            maxMarks: !['number', 'integer'].includes(c.type) ? null
-              : c.locked && !c.fixedMax ? (f.maxMarks ?? null)
-              : (c.maxMarks ?? null),
-          })),
-        }));
-        // Plain "Save" now persists whatever the draft's own active state is — new
-        // sections default active:true (blankSection()/newSection()), so a table is
-        // visible to faculty as soon as it's saved, no separate Activate click needed.
-        // Explicit Activate/Deactivate still bulk-set the whole family, but an
-        // individually-retired section (active:false in the draft) stays retired
-        // even during a bulk Activate, so restoring one still requires the
-        // "Restore retired items" checkbox first.
-        const active = activate === undefined ? section.active !== false : activate && section.active !== false;
-        const payload = {
-          code, form_family: form.backendFamily, part: section.part,
-          section_key: section.sectionKey || code,
-          title: fields.length === 1 ? fields[0].label || section.title : section.title,
-          max_marks: section.maxMarks ?? 0, active, order: completed,
-          tableOrder: form.tableOrder || [], fields,
-        };
-        if (current) {
-          await api.updateFields(code, { fields, tableOrder: payload.tableOrder });
-          await api.update(code, { title: payload.title, part: payload.part, max_marks: payload.max_marks, active, order: payload.order, tableOrder: payload.tableOrder });
-        } else {
-          await api.create(payload);
+    const { entries, deletions } = buildPlan(form, existing, activate);
+    const describe = entry => {
+      const changes = [];
+      if (entry.kind === 'update') {
+        const { current, payload, fields } = entry;
+        if (current.title !== payload.title) changes.push(`Title: "${current.title}" → "${payload.title}"`);
+        if (current.part !== payload.part) changes.push(`Moved: "${current.part}" → "${payload.part}"`);
+        if ((current.max_marks ?? 0) !== payload.max_marks) changes.push(`Total Marks: ${current.max_marks ?? 0} → ${payload.max_marks}`);
+        if ((current.active !== false) !== payload.active) changes.push(payload.active ? 'Reactivated' : 'Retired / deactivated');
+        if ((current.order ?? 0) !== payload.order) changes.push('Reordered');
+        if (stableStringify(current.tableOrder || current.table_order || []) !== stableStringify(payload.tableOrder)) changes.push('Column/table sequence changed');
+        const oldFields = new Map((current.fields || []).map(f => [f.id || f.key, f]));
+        const newFields = new Map(fields.map(f => [f.id || f.key, f]));
+        for (const [id, nf] of newFields) {
+          const of = oldFields.get(id);
+          if (!of) { changes.push(`Added field "${nf.label || id}"`); continue; }
+          if ((of.guideline || '') !== (nf.guideline || '')) changes.push(`Guideline changed on "${nf.label || id}"`);
+          const oldCols = new Map((of.columns || []).map((c, i) => [c.name ? `n:${c.name}` : `i:${i}`, c]));
+          const newCols = new Map((nf.columns || []).map((c, i) => [c.name ? `n:${c.name}` : `i:${i}`, c]));
+          for (const [key, nc] of newCols) {
+            const oc = oldCols.get(key);
+            if (!oc) { changes.push(`Added column "${nc.name}" in "${nf.label || id}"`); continue; }
+            if (oc.type !== nc.type) changes.push(`Column "${nc.name}" type: ${oc.type} → ${nc.type}`);
+            if ((oc.maxMarks ?? null) !== (nc.maxMarks ?? null)) changes.push(`Column "${nc.name}" max marks: ${oc.maxMarks ?? '—'} → ${nc.maxMarks ?? '—'}`);
+          }
+          for (const key of oldCols.keys()) if (!newCols.has(key)) changes.push(`Removed column "${oldCols.get(key).name}" in "${nf.label || id}"`);
         }
-        completed++;
+        for (const id of oldFields.keys()) if (!newFields.has(id)) changes.push(`Removed field "${oldFields.get(id).label || id}"`);
       }
-      for (const row of owned) if (!keep.has(row.code)) await api.remove(row.code);
+      return { code: entry.code, part: entry.part, title: entry.payload.title, kind: entry.kind, changes };
+    };
+    return {
+      created: entries.filter(e => e.kind === 'create').map(describe),
+      updated: entries.filter(e => e.kind === 'update').map(describe),
+      unchanged: entries.filter(e => e.kind === 'unchanged').map(describe),
+      deleted: deletions.map(r => ({ code: r.code, part: r.part, title: r.title })),
+    };
+  }
+  async function save(form, { activate } = {}) {
+    const existing = await api.list();
+    if (!Array.isArray(existing)) throw new Error('Could not verify existing schemas.');
+    const { entries, deletions } = buildPlan(form, existing, activate);
+    try {
+      for (const entry of entries) {
+        if (entry.kind === 'unchanged') continue;
+        if (entry.kind === 'update') {
+          await api.updateFields(entry.code, { fields: entry.fields, tableOrder: entry.payload.tableOrder });
+          await api.update(entry.code, { title: entry.payload.title, part: entry.payload.part, max_marks: entry.payload.max_marks, active: entry.payload.active, order: entry.payload.order, tableOrder: entry.payload.tableOrder });
+        } else {
+          await api.create(entry.payload);
+        }
+      }
+      for (const row of deletions) await api.remove(row.code);
     } catch (error) {
       throw new Error(`Schema save did not finish: ${error.message}. Some requests may already have succeeded; your draft is retained. Retry to reconcile with the server.`);
     }
@@ -129,5 +223,5 @@ export function createSchemaStore(api) {
       retired: retained.length,
     };
   }
-  return { load, save, remove };
+  return { load, save, remove, diff };
 }
