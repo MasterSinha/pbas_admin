@@ -4,6 +4,7 @@ import { I } from '../../components/icons';
 import { inp, lbl, pBtn, oBtn, smBtn } from '../../constants/styleTokens';
 import PageHead from '../../components/PageHead';
 import './DynamicFormPage.css';
+import { matrixPreviewRows } from '../../utils/matrixTable';
 import { api } from '../../api/client';
 import { createSchemaStore } from '../../utils/backendFormSchemas';
 import { readFormMetadata, writeFormMetadata } from '../../utils/backendFormMetadata';
@@ -18,7 +19,7 @@ import {
   getDynamicForms, deleteDynamicForm,
   blankDraft, blankField, blankColumn, newSection,
   maskDateDDMMYYYY, isValidDDMMYYYY, filterNumeric,
-  findMissingSelfScoreMax, resolveSelfScoreMax,
+  findMissingSelfScoreMax, resolveSelfScoreMax, columnsCompatibleForMerge,
 } from '../../utils/dynamicFormRegistry';
 
 const STEPS = [
@@ -144,7 +145,7 @@ function DetailsStep({ draft, updateDraft }) {
 }
 
 // ── Field row editor ─────────────────────────────────────────────────────────
-function FieldRow({ field, index, total, onChange, onMove, onDelete }) {
+function FieldRow({ field, index, total, onChange, onMove, onDelete, prevTableColumns }) {
   const set = (k, v) => onChange({ ...field, [k]: v });
   const fileInputRef = useRef(null);
   const TypeIcon = TYPE_ICONS[field.type] || I.edit;
@@ -308,10 +309,70 @@ function FieldRow({ field, index, total, onChange, onMove, onDelete }) {
               onChange={e => set('guideline', e.target.value)}
             />
           </label>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16 }}>
+          <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
             <input type="checkbox" checked={!!field.requireCompleteRows} onChange={e => set('requireCompleteRows', e.target.checked)} />
             Require complete rows
           </label>
+
+          <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 12 }}>
+            <label style={{ display: 'block' }}>
+              <span style={{ ...lbl, display: 'block', marginBottom: 4 }}>Table layout</span>
+              <select
+                value={field.layout || 'columns'}
+                onChange={e => onChange({ ...field, layout: e.target.value, mergeWithPrevious: false,
+                  rowHeaders: field.rowHeaders?.length ? field.rowHeaders : [
+                    { id: crypto.randomUUID(), label: 'Taken' },
+                    { id: crypto.randomUUID(), label: 'Out of' },
+                  ] })}
+                style={{ ...inp, width: 220, padding: '6px 8px' }}
+              >
+                <option value="columns">Standard (headers on top)</option>
+                <option value="rows">Row labels (headers on left)</option>
+                <option value="matrix">Top and left headers</option>
+              </select>
+            </label>
+            {field.layout === 'rows' && (
+              <span style={{ fontSize: 11, color: C.muted, maxWidth: 260, lineHeight: 1.5, marginTop: 22 }}>
+                Each column becomes one labeled row instead, with a single input per row — not repeatable ("Add Row" is hidden for this layout).
+              </span>
+            )}
+          </div>
+
+          {field.layout === 'matrix' && <div className="df-matrix-settings">
+            <label>Top-left header
+              <input className="ifield" style={inp} value={field.rowHeaderTitle ?? ''} placeholder="e.g. No. of leaves taken in the year" onChange={e => set('rowHeaderTitle', e.target.value)} />
+            </label>
+            <div className="df-parts-heading"><h3>Left row headers</h3><span>{field.rowHeaders?.length || 0} rows</span></div>
+            {(field.rowHeaders || []).map((row, idx) => <div className="df-matrix-row" key={row.id}>
+              <label>Row {idx + 1}
+                <input className="ifield" style={inp} value={row.label} placeholder="Row label (optional)" onChange={e => set('rowHeaders', field.rowHeaders.map(r => r.id === row.id ? { ...r, label: e.target.value } : r))} />
+              </label>
+              <div className="df-part-actions">
+                {[-1, 1].map(direction => <button type="button" className="df-icon-button" key={direction} title={direction === -1 ? 'Move row up' : 'Move row down'} disabled={idx + direction < 0 || idx + direction >= field.rowHeaders.length} onClick={() => {
+                  const next = [...field.rowHeaders];
+                  [next[idx], next[idx + direction]] = [next[idx + direction], next[idx]];
+                  set('rowHeaders', next);
+                }}><span style={{ display: 'flex', transform: direction === -1 ? 'rotate(180deg)' : undefined }}><I.chevron size={14} /></span></button>)}
+                <button type="button" className="df-icon-button df-delete" title="Remove row header" disabled={field.rowHeaders.length <= 1} onClick={() => set('rowHeaders', field.rowHeaders.filter(r => r.id !== row.id))}><I.trash size={14} /></button>
+              </div>
+            </div>)}
+            <button type="button" style={oBtn} onClick={() => set('rowHeaders', [...(field.rowHeaders || []), { id: crypto.randomUUID(), label: '' }])}><I.list size={14} /> Add row header</button>
+          </div>}
+
+          {prevTableColumns && (field.layout || 'columns') === 'columns' && (
+            <label
+              style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, opacity: columnsCompatibleForMerge(prevTableColumns, field.columns) ? 1 : .5 }}
+              title={columnsCompatibleForMerge(prevTableColumns, field.columns) ? undefined : 'Only available when this table has the exact same column names, in order, as the table above it'}
+            >
+              <input
+                type="checkbox" checked={!!field.mergeWithPrevious}
+                disabled={!columnsCompatibleForMerge(prevTableColumns, field.columns)}
+                onChange={e => set('mergeWithPrevious', e.target.checked)}
+              />
+              Merge with the table above (share one header)
+            </label>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5 }}>
               Total Marks
@@ -331,7 +392,7 @@ function FieldRow({ field, index, total, onChange, onMove, onDelete }) {
           </div>
 
           <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, color: C.muted, cursor: 'pointer', marginBottom: 8 }}>
-            <input type="checkbox" checked={field.autoSerial !== false} onChange={e => set('autoSerial', e.target.checked)} />
+            <input type="checkbox" disabled={field.layout === 'matrix'} checked={field.layout !== 'matrix' && field.autoSerial !== false} onChange={e => set('autoSerial', e.target.checked)} />
             Auto-number rows (adds a "Sr. No." column automatically — not listed below)
           </label>
 
@@ -527,6 +588,7 @@ function TablesStep({ draft, selectedPart, onSelectPart, onAddPart, onDeletePart
               Restore retired items
             </label>}
             <FieldRow field={field} index={index} total={items.length}
+              prevTableColumns={items[index - 1]?.field.type === 'table' ? items[index - 1].field.columns : null}
               onChange={next => onChange(section.id, { ...section, fields: section.fields.map(f => f.id === field.id ? next : f) })}
               onMove={direction => onMove(activePart, field.id, direction)}
               onDelete={() => onDelete(section.id, field.id)} />
@@ -658,10 +720,17 @@ function TableCell({ column, value, onChange }) {
   </div>;
 }
 
-function LiveTable({ field, rows, onRowsChange }) {
-  const list = rows.length ? rows : [{}];
-  const autoSerial = field.autoSerial !== false;
+const MIN_COLUMN_WIDTH = 90;
+
+function LiveTable({ field, rows, onRowsChange, onColumnResize, onColumnReorder, onColumnAdd, hideHeader }) {
+  const matrix = field.layout === 'matrix';
+  const list = matrix ? matrixPreviewRows(field, rows) : rows.length ? rows : [{}];
+  const autoSerial = !matrix && field.autoSerial !== false;
   const incomplete = incompleteTableRows(field, list);
+  const [dragWidth, setDragWidth] = useState(null); // { idx, px } | null — live feedback while resizing
+  const [dragOverIdx, setDragOverIdx] = useState(null); // column index currently being dragged over, for reordering
+  const draggingIdxRef = useRef(null);
+  const resizeRef = useRef(null);
 
   function updateCell(rowIdx, colName, val) {
     const next = [...list];
@@ -675,53 +744,158 @@ function LiveTable({ field, rows, onRowsChange }) {
     if (list.length <= 1) return;
     onRowsChange(list.slice(0, -1));
   }
+  function widthOf(idx, col) {
+    if (dragWidth && dragWidth.idx === idx) return dragWidth.px;
+    return col.width || null;
+  }
+  function startResize(idx, e) {
+    if (!onColumnResize) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const th = e.currentTarget.closest('th');
+    const startX = e.clientX;
+    const startWidth = th.getBoundingClientRect().width;
+    resizeRef.current = { idx, startX, startWidth, finalPx: Math.round(startWidth) };
+    setDragWidth({ idx, px: resizeRef.current.finalPx });
+    const onMove = ev => {
+      if (!resizeRef.current) return;
+      const next = Math.max(MIN_COLUMN_WIDTH, Math.round(resizeRef.current.startWidth + (ev.clientX - resizeRef.current.startX)));
+      resizeRef.current.finalPx = next;
+      setDragWidth({ idx: resizeRef.current.idx, px: next });
+    };
+    const onUp = () => {
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      if (resizeRef.current) onColumnResize(field.id, resizeRef.current.idx, resizeRef.current.finalPx);
+      resizeRef.current = null;
+      setDragWidth(null);
+    };
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+  }
+  useEffect(() => { setDragWidth(null); draggingIdxRef.current = null; setDragOverIdx(null); }, [field.id]);
 
   return (
-    <div className="df-live-table" role="region" aria-label={field.label || 'Table preview'} tabIndex={0} style={{ overflowX: 'auto', borderRadius: 8, border: '1px solid var(--c-border)' }}>
+    <div className="df-live-table" role="region" aria-label={field.label || 'Table preview'} tabIndex={0} style={{
+      overflowX: 'auto', border: '1px solid var(--c-border)',
+      ...(hideHeader ? { borderRadius: '0 0 8px 8px', borderTop: 'none', marginTop: -1 } : { borderRadius: 8 }),
+    }}>
       <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
-        <thead>
+        {!hideHeader && <thead>
           <tr>
+            {matrix && <th scope="col" className="df-matrix-corner">{field.rowHeaderTitle || field.label}</th>}
             {autoSerial && (
               <th style={{ textAlign: 'left', padding: '7px 10px', background: 'var(--c-soft-bg)', color: C.muted, fontWeight: 700, borderBottom: '1px solid var(--c-border)', width: 46 }}>Sr.</th>
             )}
-            {field.columns.map((c, i) => (
-              <th key={i} style={{ textAlign: 'left', padding: '7px 10px', background: 'var(--c-soft-bg)', color: C.muted, fontWeight: 700, borderBottom: '1px solid var(--c-border)' }}>
-                <span className="df-preview-column-name">{c.name || `Column ${i + 1}`}</span>
+            {field.columns.map((c, i) => {
+              const w = widthOf(i, c);
+              const canDrag = !!onColumnReorder && !c.locked;
+              return (
+              <th key={i}
+                draggable={canDrag}
+                onDragStart={canDrag ? (e => { draggingIdxRef.current = i; e.dataTransfer.effectAllowed = 'move'; }) : undefined}
+                onDragOver={canDrag ? (e => { e.preventDefault(); if (draggingIdxRef.current != null && draggingIdxRef.current !== i) setDragOverIdx(i); }) : undefined}
+                onDragLeave={canDrag ? (() => setDragOverIdx(idx => (idx === i ? null : idx))) : undefined}
+                onDrop={canDrag ? (e => {
+                  e.preventDefault();
+                  const from = draggingIdxRef.current;
+                  draggingIdxRef.current = null;
+                  setDragOverIdx(null);
+                  if (from != null && from !== i) onColumnReorder(field.id, from, i);
+                }) : undefined}
+                onDragEnd={canDrag ? (() => { draggingIdxRef.current = null; setDragOverIdx(null); }) : undefined}
+                style={{
+                  position: 'relative', textAlign: 'left', padding: '7px 10px',
+                  background: dragOverIdx === i ? `${C.accent}18` : 'var(--c-soft-bg)',
+                  color: C.muted, fontWeight: 700, borderBottom: '1px solid var(--c-border)',
+                  borderLeft: dragOverIdx === i ? `2px solid ${C.accent}` : '2px solid transparent',
+                  cursor: canDrag ? 'grab' : undefined,
+                  ...(w ? { width: w, minWidth: w, maxWidth: w } : {}),
+                }}>
+                <span className="df-preview-column-name" style={w ? { minWidth: 0, maxWidth: '100%' } : undefined}>{c.name || `Column ${i + 1}`}</span>
                 <span className="df-preview-column-meta">{COLUMN_TYPES.find(t => t.value === c.type)?.label || c.type}{isNumericColumn(c.type) && resolveSelfScoreMax(field, c) != null && <span> / Max {resolveSelfScoreMax(field, c)}</span>}</span>
+                {onColumnResize && (
+                  <span
+                    onMouseDown={e => startResize(i, e)}
+                    title="Drag to resize this column"
+                    aria-hidden="true"
+                    style={{
+                      position: 'absolute', top: 0, right: 0, bottom: 0, width: 8, cursor: 'col-resize',
+                      background: dragWidth?.idx === i ? `${C.accent}40` : 'transparent',
+                    }}
+                    onMouseEnter={e => { e.currentTarget.style.background = `${C.accent}25`; }}
+                    onMouseLeave={e => { if (dragWidth?.idx !== i) e.currentTarget.style.background = 'transparent'; }}
+                  />
+                )}
               </th>
-            ))}
+              );
+            })}
           </tr>
-        </thead>
+        </thead>}
         <tbody>
           {list.map((row, ri) => (
-            <tr key={ri}>
+            <tr key={matrix ? row._matrixRowId : ri}>
+              {matrix && <th scope="row" className="df-matrix-row-header">{field.rowHeaders[ri].label}</th>}
               {autoSerial && (
                 <td style={{ padding: '8px 10px', color: C.muted, borderTop: ri > 0 ? '1px solid var(--c-divider)' : 'none' }}>{ri + 1}</td>
               )}
-              {field.columns.map((c, ci) => (
-                <td key={ci} style={{ padding: '6px 8px', borderTop: ri > 0 ? '1px solid var(--c-divider)' : 'none', minWidth: c.type === 'file' ? 70 : 120 }}>
+              {field.columns.map((c, ci) => {
+                const w = widthOf(ci, c);
+                return (
+                <td key={ci} style={{
+                  padding: '6px 8px', borderTop: ri > 0 ? '1px solid var(--c-divider)' : 'none',
+                  ...(w ? { width: w, minWidth: w, maxWidth: w } : { minWidth: c.type === 'file' ? 70 : 120 }),
+                }}>
                   <TableCell column={c} value={row[c.name]} onChange={v => updateCell(ri, c.name, v)} />
                   {incomplete.some(error => error.row === ri + 1 && error.missing.includes(c.name)) && <div style={{ color: C.red, marginTop: 6, fontSize: 11 }}>Required to complete row</div>}
                 </td>
-              ))}
+                );
+              })}
             </tr>
           ))}
         </tbody>
       </table>
       {incomplete.length > 0 && <p role="status" style={{ color: C.red, padding: 12, fontSize: 12 }}>Complete rows {incomplete.map(e => e.row).join(', ')} before submitting.</p>}
       <div style={{ display: 'flex', gap: 8, padding: '8px 10px', borderTop: '1px dashed var(--c-border)' }}>
-        <button type="button" className="act-btn" onClick={addRow} style={{ ...smBtn, padding: '4px 10px' }}>+ Add Row</button>
-        <button type="button" className="act-btn" onClick={removeLastRow} disabled={list.length <= 1}
+        {!matrix && <button type="button" className="act-btn" onClick={addRow} style={{ ...smBtn, padding: '4px 10px' }}>+ Add Row</button>}
+        {!matrix && <button type="button" className="act-btn" onClick={removeLastRow} disabled={list.length <= 1}
           style={{ ...smBtn, padding: '4px 10px', opacity: list.length <= 1 ? .5 : 1, cursor: list.length <= 1 ? 'default' : 'pointer' }}>
           Remove Last Row
-        </button>
+        </button>}
+        {onColumnAdd && <button type="button" className="act-btn" style={smBtn} onClick={() => onColumnAdd(field.id)}><I.layers size={13} /> Add Column</button>}
       </div>
     </div>
   );
 }
 
+// Same table, "layout: rows" — each column becomes one labeled row (label on
+// the left, single input on the right) instead of a header-across-the-top,
+// repeatable-rows table. Single instance only — no Add/Remove Row here.
+function TransposedTable({ field, values, onChange }) {
+  return (
+    <div className="df-live-table" role="region" aria-label={field.label || 'Table preview'} style={{ borderRadius: 8, border: '1px solid var(--c-border)', overflow: 'hidden' }}>
+      {field.columns.map((c, i) => (
+        <div key={i} style={{
+          display: 'flex', alignItems: 'center', borderTop: i > 0 ? '1px solid var(--c-divider)' : 'none',
+        }}>
+          <div style={{
+            flex: '0 0 220px', padding: '10px 12px', background: 'var(--c-soft-bg)', color: C.muted,
+            fontWeight: 700, fontSize: 11.5, alignSelf: 'stretch', display: 'flex', alignItems: 'center',
+            borderRight: '1px solid var(--c-border)',
+          }}>
+            {c.name || `Column ${i + 1}`}
+          </div>
+          <div style={{ flex: 1, padding: '8px 10px', minWidth: 0 }}>
+            <TableCell column={c} value={values[c.name]} onChange={v => onChange(c.name, v)} />
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Step 3: Preview — try filling out the actual form, one section per page ──
-function PreviewStep({ draft }) {
+function PreviewStep({ draft, onColumnResize, onColumnReorder, onColumnAdd }) {
   const [rowValidation, setRowValidation] = useState('');
   const [values, setValues] = useState({});
   const [condExtra, setCondExtra] = useState({});
@@ -743,7 +917,7 @@ function PreviewStep({ draft }) {
   function validateRows() {
     const failures = visibleSections.flatMap(section => section.fields
       .filter(f => f.active !== false && f.type === 'table')
-      .flatMap(f => incompleteTableRows(f, tableRows[f.id]).map(error =>
+      .flatMap(f => incompleteTableRows(f, f.layout === 'matrix' ? matrixPreviewRows(f, tableRows[f.id]) : tableRows[f.id]).map(error =>
         `${section.title}: ${f.label || 'Table'}, row ${error.row} - ${error.missing.join(', ')}`)));
     setRowValidation(failures.length ? `Incomplete rows: ${failures.join('; ')}` : 'All started rows are complete.');
   }
@@ -829,28 +1003,47 @@ function PreviewStep({ draft }) {
 
               {visibleFields.length === 0 ? (
                 <div style={{ fontSize: 11.5, color: C.muted }}>No tables in this part yet.</div>
-              ) : visibleFields.map(f => (
-                <div key={f.id}>
-                  <label style={lbl}>
-                    {f.label || 'Untitled field'} {f.required && <span style={{ color: C.red }}>*</span>}
-                    {f.type === 'table' && f.maxMarks != null && (
-                      <span style={{ marginLeft: 8, textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.accent }}>
-                        Total: {f.maxMarks} marks
-                      </span>
-                    )}
-                  </label>
-                  {f.type === 'table' && f.guideline?.trim() && (
+              ) : visibleFields.map((f, idx) => {
+                const prevField = visibleFields[idx - 1];
+                const merged = f.type === 'table' && f.mergeWithPrevious && prevField?.type === 'table'
+                  && (f.layout || 'columns') === 'columns' && (prevField.layout || 'columns') === 'columns'
+                  && columnsCompatibleForMerge(prevField.columns, f.columns);
+                return (
+                <div key={f.id} style={merged ? { marginTop: -16 } : undefined}>
+                  {!merged && (
+                    <label style={lbl}>
+                      {f.label || 'Untitled field'} {f.required && <span style={{ color: C.red }}>*</span>}
+                      {f.type === 'table' && f.maxMarks != null && (
+                        <span style={{ marginLeft: 8, textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.accent }}>
+                          Total: {f.maxMarks} marks
+                        </span>
+                      )}
+                    </label>
+                  )}
+                  {!merged && f.type === 'table' && f.guideline?.trim() && (
                     <div style={{ fontSize: 11.5, color: C.muted, background: 'var(--c-soft-bg)', border: '1px solid var(--c-border)', borderRadius: 8, padding: '8px 11px', marginBottom: 8, whiteSpace: 'pre-wrap' }}>
                       {f.guideline}
                     </div>
                   )}
 
                   {f.type === 'table' ? (
-                    <LiveTable
-                      field={f}
-                      rows={tableRows[f.id] || [{}]}
-                      onRowsChange={rows => setTableRows(prev => ({ ...prev, [f.id]: rows }))}
-                    />
+                    f.layout === 'rows' ? (
+                      <TransposedTable
+                        field={f}
+                        values={(tableRows[f.id] || [{}])[0] || {}}
+                        onChange={(colName, v) => setTableRows(prev => ({ ...prev, [f.id]: [{ ...(prev[f.id]?.[0] || {}), [colName]: v }] }))}
+                      />
+                    ) : (
+                      <LiveTable
+                        field={f}
+                        rows={tableRows[f.id] || [{}]}
+                        onRowsChange={rows => setTableRows(prev => ({ ...prev, [f.id]: rows }))}
+                        onColumnResize={onColumnResize}
+                        onColumnReorder={onColumnReorder}
+                        onColumnAdd={onColumnAdd}
+                        hideHeader={merged}
+                      />
+                    )
                   ) : f.type === 'conditionalText' ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                       <LiveInput type="dropdown" options={f.options} value={values[f.id]} onChange={v => setValue(f.id, v)} />
@@ -865,7 +1058,8 @@ function PreviewStep({ draft }) {
                     <LiveInput type={f.type} options={f.options} value={values[f.id]} onChange={v => setValue(f.id, v)} />
                   )}
                 </div>
-              ))}
+                );
+              })}
 
               <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8, paddingTop: 16, borderTop: '1px solid var(--c-divider)' }}>
                 <button type="button" className="act-btn" style={oBtn} disabled={page === 0} onClick={() => setPage(p => Math.max(0, p - 1))}>
@@ -1130,6 +1324,40 @@ export default function DynamicFormPage() {
   function updateSection(id, next) {
     setDraft(d => ({ ...d, sections: d.sections.map(s => s.id === id ? next : s) }));
   }
+  // Preview-step column drag/resize — looked up by field id (fields are
+  // flattened across sections there) and written back into the matching
+  // section, so both persist to the backend on the next Save like any other
+  // column property. Both refuse to touch or displace the locked Faculty
+  // Score column, same as the builder's own move/resize controls.
+  function updateFieldColumns(fieldId, mapColumns) {
+    setDraft(d => ({
+      ...d,
+      sections: d.sections.map(s => ({
+        ...s,
+        fields: s.fields.map(f => f.id !== fieldId ? f : { ...f, columns: mapColumns(f.columns) }),
+      })),
+    }));
+  }
+  function resizeFieldColumn(fieldId, colIdx, widthPx) {
+    updateFieldColumns(fieldId, columns => columns.map((c, i) => i === colIdx ? { ...c, width: widthPx } : c));
+  }
+  function addPreviewColumn(fieldId) {
+    updateFieldColumns(fieldId, columns => {
+      const next = [...columns];
+      const locked = next.findIndex(c => c.locked);
+      next.splice(locked < 0 ? next.length : locked, 0, blankColumn('text', columns.length));
+      return next;
+    });
+  }
+  function reorderFieldColumn(fieldId, fromIdx, toIdx) {
+    updateFieldColumns(fieldId, columns => {
+      if (columns[fromIdx]?.locked || columns[toIdx]?.locked) return columns;
+      const next = [...columns];
+      const [moved] = next.splice(fromIdx, 1);
+      next.splice(toIdx, 0, moved);
+      return next;
+    });
+  }
   function goStep(next) {
     if (step === 0 && next > step && !draft.label.trim()) { setMsg('Give the form a name first.'); return; }
     jumpToStep(next);
@@ -1242,7 +1470,7 @@ export default function DynamicFormPage() {
               <div key={step} className="df-step-panel" style={{ animation: `${dir === 'forward' ? 'slideInRight' : 'slideInLeft'} .2s ease both` }}>
                 {step === 0 && <DetailsStep draft={draft} updateDraft={updateDraft} />}
                 {step === 1 && <TablesStep draft={draft} selectedPart={selectedPart} onSelectPart={setSelectedPart} onAddPart={addPart} onDeletePart={deletePart} onMovePart={movePart} onChange={updateSection} onAdd={addTable} onDelete={deleteTable} onMove={moveTable} onPartGuidelineChange={setPartGuideline} />}
-                {step === 2 && <PreviewStep key={previewNonce} draft={draft} />}
+                {step === 2 && <PreviewStep key={previewNonce} draft={draft} onColumnResize={resizeFieldColumn} onColumnReorder={reorderFieldColumn} onColumnAdd={addPreviewColumn} />}
                 {step === 3 && <PublishStep draft={draft} msg={msg} onSaveDraft={handleSaveDraft} onPublish={handlePublish} onUnpublish={handleUnpublish}
                   onPreview={previewChanges} diffResult={diffResult} diffBusy={diffBusy} diffError={diffError} />}
               </div>

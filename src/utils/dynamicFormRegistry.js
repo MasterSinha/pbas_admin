@@ -121,6 +121,15 @@ export function blankField(type = 'text') {
     requireCompleteRows: type === 'table' ? false : undefined,
     maxMarks: type === 'table' ? null : undefined,
     guideline: type === 'table' ? '' : undefined,
+    // 'columns' = normal table (headers across the top, repeatable rows).
+    // 'rows' = transposed: each column definition becomes a labeled row
+    // instead, label on the left, one input on the right — a single
+    // fixed set of parameters, not repeatable.
+    layout: type === 'table' ? 'columns' : undefined,
+    // When true and the immediately-preceding table has identical column
+    // names, this table's own header is hidden in preview and it visually
+    // joins onto the table above it as one continuous table.
+    mergeWithPrevious: type === 'table' ? false : undefined,
     isCustom: true,
     active: true,
   };
@@ -237,8 +246,18 @@ function normalizeField(field) {
     active: field.active ?? true,
     maxMarks: field.type === 'table' ? (field.maxMarks ?? null) : field.maxMarks,
     guideline: field.type === 'table' ? (field.guideline ?? '') : field.guideline,
+    layout: field.type === 'table' ? (field.layout || 'columns') : field.layout,
+    mergeWithPrevious: field.type === 'table' ? !!field.mergeWithPrevious : field.mergeWithPrevious,
     columns,
   };
+}
+
+// Two tables' columns are compatible for merging (shared header) only if
+// every non-locked column matches by name, in order — the locked Faculty
+// Score column is allowed to differ in max-marks between them.
+export function columnsCompatibleForMerge(colsA, colsB) {
+  if (!colsA?.length || !colsB?.length || colsA.length !== colsB.length) return false;
+  return colsA.every((c, i) => (c.name || '').trim() === (colsB[i]?.name || '').trim());
 }
 
 // A locked Faculty Score column's "Total Marks per Row" is only required input

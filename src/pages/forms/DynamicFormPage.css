@@ -135,6 +135,13 @@ main:has(> div > .dynamic-form-page) { min-width: 0; }
 .df-column-name { grid-column: 1; grid-row: 1; }
 .df-column-placeholder { grid-column: 2; grid-row: 1; }
 .df-cell-hint { display: block; margin-top: 6px; color: var(--c-muted); font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.df-matrix-settings { display: flex; flex-direction: column; gap: 14px; padding: 18px 0; margin-bottom: 18px; border-block: 1px solid var(--c-border); }
+.df-matrix-settings label { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.df-matrix-row { display: flex; align-items: flex-end; gap: 12px; }
+.df-matrix-row > label { flex: 1; }
+.df-matrix-row .df-part-actions { min-height: 42px; align-items: center; }
+.df-live-table .df-matrix-corner, .df-live-table .df-matrix-row-header { min-width: 220px; max-width: 360px; text-align: left; white-space: normal; overflow-wrap: anywhere; color: var(--c-text); border-right: 1px solid var(--c-border); }
+.df-live-table .df-matrix-row-header { background: var(--c-bg) !important; border-bottom: 1px solid var(--c-border) !important; }
 .df-column-type { grid-column: 3; grid-row: 1; }
 .df-column-max { grid-column: 1; grid-row: 2; }
 .df-column-editor :is(input, select, textarea) { width: 100% !important; height: 44px !important; min-height: 44px !important; max-height: 44px !important; padding: 10px 12px !important; margin: 0; flex: initial !important; border-radius: 5px !important; box-sizing: border-box; }
