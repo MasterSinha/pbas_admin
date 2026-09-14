@@ -884,7 +884,42 @@ function PreviewStep({ draft }) {
 }
 
 // ── Step 4: Publish — summary + the actual save/publish actions ─────────────
-function PublishStep({ draft, msg, onSaveDraft, onPublish, onUnpublish }) {
+function DiffLine({ sign, color, children }) {
+  return (
+    <div style={{ display: 'flex', gap: 8, fontSize: 11.5, fontFamily: 'monospace', color, padding: '2px 0' }}>
+      <span style={{ flexShrink: 0, fontWeight: 800 }}>{sign}</span>
+      <span style={{ color: C.text }}>{children}</span>
+    </div>
+  );
+}
+
+function DiffPanel({ result }) {
+  if (!result) return null;
+  const nothing = !result.created.length && !result.updated.length && !result.deleted.length;
+  return (
+    <div style={{ border: '1px solid var(--c-border)', borderRadius: 10, background: 'var(--c-bg)', padding: '12px 14px', marginBottom: 16, fontSize: 12 }}>
+      <div style={{ fontWeight: 700, marginBottom: 8, color: C.text }}>Changes since the last save</div>
+      {nothing && <div style={{ color: C.muted, fontSize: 11.5 }}>Nothing to save — this matches what's already on the backend.</div>}
+      {result.created.map(e => (
+        <DiffLine key={e.code} sign="+" color="#34d399">{e.part} / {e.title || 'Untitled table'}</DiffLine>
+      ))}
+      {result.updated.map(e => (
+        <div key={e.code}>
+          <DiffLine sign="~" color="#fbbf24">{e.part} / {e.title || 'Untitled table'}</DiffLine>
+          {e.changes.map((c, i) => <div key={i} style={{ marginLeft: 22, fontSize: 11, color: C.muted, fontFamily: 'monospace' }}>· {c}</div>)}
+        </div>
+      ))}
+      {result.deleted.map(e => (
+        <DiffLine key={e.code} sign="-" color="#f87171">{e.part} / {e.title || 'Untitled table'}</DiffLine>
+      ))}
+      {result.unchanged.length > 0 && (
+        <div style={{ marginTop: 6, color: C.muted, fontSize: 11 }}>{result.unchanged.length} table{result.unchanged.length === 1 ? '' : 's'} unchanged</div>
+      )}
+    </div>
+  );
+}
+
+function PublishStep({ draft, msg, onSaveDraft, onPublish, onUnpublish, onPreview, diffResult, diffBusy, diffError }) {
   const FIcon = I[draft.iconName] || I.doc;
   return (
     <div className="df-publish">
@@ -930,7 +965,13 @@ function PublishStep({ draft, msg, onSaveDraft, onPublish, onUnpublish }) {
         </span>
       </div>
 
+      {diffError && <div className="df-message" role="alert" style={{ marginBottom: 14 }}>{diffError}</div>}
+      <DiffPanel result={diffResult} />
+
       <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+        <button className="act-btn" style={oBtn} onClick={onPreview} disabled={diffBusy}>
+          <I.workflow size={14} /> {diffBusy ? 'Checking…' : 'Review changes'}
+        </button>
         <button className="act-btn" style={oBtn} onClick={onSaveDraft}>Save schema</button>
         {draft.published ? (
           <button className="act-btn" style={{ ...oBtn, color: C.yellow, borderColor: `${C.yellow}45` }} onClick={onUnpublish}>
@@ -959,6 +1000,9 @@ export default function DynamicFormPage() {
   const [selectedPart, setSelectedPart] = useState('');
   const [previewNonce, setPreviewNonce] = useState(0);
   const [msg, setMsg] = useState('');
+  const [diffResult, setDiffResult] = useState(null);
+  const [diffBusy, setDiffBusy] = useState(false);
+  const [diffError, setDiffError] = useState('');
   const publishedCount = forms.filter(f => f.published).length;
 
   async function refresh() {
@@ -977,6 +1021,8 @@ export default function DynamicFormPage() {
     setStep(0);
     setSelectedPart(form.parts?.[0] || '');
     setMsg('');
+    setDiffResult(null);
+    setDiffError('');
   }
   function startNew() {
     openDraft(blankDraft());
@@ -1097,6 +1143,24 @@ export default function DynamicFormPage() {
     setStep(next);
   }
 
+  function resolveFamily() {
+    const meta = readFormMetadata();
+    const remembered = Object.entries(meta).find(([, m]) => m.sourceKey && m.sourceKey === draft.key)?.[0];
+    return { meta, family: draft.backendFamily || remembered || `custom_${crypto.randomUUID().replaceAll('-', '')}` };
+  }
+
+  async function previewChanges() {
+    if (!draft.label.trim()) { setMsg('Give the form a name first.'); return; }
+    if (!fieldCount(draft)) { setMsg('Create at least one table before saving.'); return; }
+    const { family } = resolveFamily();
+    setDiffBusy(true); setDiffError(''); setDiffResult(null);
+    try {
+      const result = await schemaStore.diff({ ...draft, backendFamily: family });
+      setDiffResult(result);
+    } catch (e) { setDiffError(e.message); }
+    finally { setDiffBusy(false); }
+  }
+
   async function persistSchema(activate) {
     if (busy) return;
     if (!draft.label.trim()) { setMsg('Give the form a name first.'); return; }
@@ -1106,14 +1170,13 @@ export default function DynamicFormPage() {
       setMsg(`Set a "Total Marks per Row" value for the Faculty Score column in: ${missingSelfScore.map(p => `${p.fieldLabel || 'table'} (${p.sectionTitle})`).join(', ')}.`);
       return;
     }
-    const meta = readFormMetadata();
-    const remembered = Object.entries(meta).find(([, m]) => m.sourceKey && m.sourceKey === draft.key)?.[0];
-    const family = draft.backendFamily || remembered || `custom_${crypto.randomUUID().replaceAll('-', '')}`;
+    const { meta, family } = resolveFamily();
     const working = { ...draft, backendFamily: family };
     setDraft(working);
     setBusy(true);
     setSyncError('');
     setMsg('');
+    setDiffResult(null);
     try {
       const savedForms = await schemaStore.save(working, { activate });
       meta[family] = { label: working.label, desc: working.desc, color: working.color, iconName: working.iconName, partGuidelines: working.partGuidelines || {}, sourceKey: working.backendManaged ? meta[family]?.sourceKey : working.key };
@@ -1136,7 +1199,7 @@ export default function DynamicFormPage() {
   }
 
   return (
-    <div className={`dynamic-form-page ${mobileNavOpen ? 'df-mobile-nav-open' : ''}`}>
+    <div className={`dynamic-form-page page-enter ${mobileNavOpen ? 'df-mobile-nav-open' : ''}`}>
       <button type="button" className="df-mobile-navigation" aria-expanded={mobileNavOpen} onClick={() => setMobileNavOpen(open => !open)}>
         {mobileNavOpen ? <I.x size={16} /> : <I.list size={16} />} {mobileNavOpen ? 'Close navigation' : 'Navigation'}
       </button>
@@ -1180,7 +1243,8 @@ export default function DynamicFormPage() {
                 {step === 0 && <DetailsStep draft={draft} updateDraft={updateDraft} />}
                 {step === 1 && <TablesStep draft={draft} selectedPart={selectedPart} onSelectPart={setSelectedPart} onAddPart={addPart} onDeletePart={deletePart} onMovePart={movePart} onChange={updateSection} onAdd={addTable} onDelete={deleteTable} onMove={moveTable} onPartGuidelineChange={setPartGuideline} />}
                 {step === 2 && <PreviewStep key={previewNonce} draft={draft} />}
-                {step === 3 && <PublishStep draft={draft} msg={msg} onSaveDraft={handleSaveDraft} onPublish={handlePublish} onUnpublish={handleUnpublish} />}
+                {step === 3 && <PublishStep draft={draft} msg={msg} onSaveDraft={handleSaveDraft} onPublish={handlePublish} onUnpublish={handleUnpublish}
+                  onPreview={previewChanges} diffResult={diffResult} diffBusy={diffBusy} diffError={diffError} />}
               </div>
               {msg && step !== 3 && <div className="df-message" role="status">{msg}</div>}
             </div>
