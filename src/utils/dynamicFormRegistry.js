@@ -144,6 +144,16 @@ export function blankDraft() {
     iconName: FORM_ICON_NAMES[0],
     parts: ['Part A'],
     partGuidelines: {},
+    // Per-part flag: when true, this part's review routes only to the
+    // Registrar, bypassing the HOD -> Director -> Dean -> VC chain. Stored
+    // as registrar_part on every section sharing that part (same denormalized
+    // pattern as partGuidelines, since a Part isn't its own backend row).
+    registrarParts: {},
+    // Per-part flag: when true, faculty does not fill this part themselves —
+    // it's scored directly by higher authority (HOD/Director/Dean/VC), like
+    // Standard Appraisal's reviewer-only Part E. Stored as reviewer_only_part
+    // on every section sharing that part, same denormalized pattern.
+    reviewerOnlyParts: {},
     sections: [],
     published: false,
     createdAt: null,

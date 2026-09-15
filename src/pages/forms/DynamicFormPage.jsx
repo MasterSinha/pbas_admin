@@ -3,6 +3,7 @@ import { C } from '../../constants/colors';
 import { I } from '../../components/icons';
 import { inp, lbl, pBtn, oBtn, smBtn } from '../../constants/styleTokens';
 import PageHead from '../../components/PageHead';
+import Toggle from '../../components/Toggle';
 import './DynamicFormPage.css';
 import { matrixPreviewRows } from '../../utils/matrixTable';
 import { api } from '../../api/client';
@@ -309,11 +310,6 @@ function FieldRow({ field, index, total, onChange, onMove, onDelete, prevTableCo
               onChange={e => set('guideline', e.target.value)}
             />
           </label>
-          <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 12 }}>
-            <input type="checkbox" checked={!!field.requireCompleteRows} onChange={e => set('requireCompleteRows', e.target.checked)} />
-            Require complete rows
-          </label>
-
           <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap', alignItems: 'flex-start', marginBottom: 12 }}>
             <label style={{ display: 'block' }}>
               <span style={{ ...lbl, display: 'block', marginBottom: 4 }}>Table layout</span>
@@ -359,21 +355,33 @@ function FieldRow({ field, index, total, onChange, onMove, onDelete, prevTableCo
             <button type="button" style={oBtn} onClick={() => set('rowHeaders', [...(field.rowHeaders || []), { id: crypto.randomUUID(), label: '' }])}><I.list size={14} /> Add row header</button>
           </div>}
 
-          {prevTableColumns && (field.layout || 'columns') === 'columns' && (
-            <label
-              style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 16, opacity: columnsCompatibleForMerge(prevTableColumns, field.columns) ? 1 : .5 }}
-              title={columnsCompatibleForMerge(prevTableColumns, field.columns) ? undefined : 'Only available when this table has the exact same column names, in order, as the table above it'}
-            >
-              <input
-                type="checkbox" checked={!!field.mergeWithPrevious}
-                disabled={!columnsCompatibleForMerge(prevTableColumns, field.columns)}
-                onChange={e => set('mergeWithPrevious', e.target.checked)}
-              />
-              Merge with the table above (share one header)
+          {/* Compact toggle chips — same options as before, just grouped into one
+              row instead of each taking its own full-width line. */}
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
+            <label className="df-chip-toggle" style={{ opacity: !!field.requireCompleteRows ? 1 : .75 }}>
+              <input type="checkbox" checked={!!field.requireCompleteRows} onChange={e => set('requireCompleteRows', e.target.checked)} />
+              Require complete rows
             </label>
-          )}
+            <label className="df-chip-toggle" style={{ opacity: field.layout === 'matrix' ? .4 : (field.autoSerial !== false ? 1 : .75) }}>
+              <input type="checkbox" disabled={field.layout === 'matrix'} checked={field.layout !== 'matrix' && field.autoSerial !== false} onChange={e => set('autoSerial', e.target.checked)} />
+              Auto-number rows <small>(adds "Sr. No.")</small>
+            </label>
+            {prevTableColumns && (field.layout || 'columns') === 'columns' && (
+              <label className="df-chip-toggle"
+                style={{ opacity: columnsCompatibleForMerge(prevTableColumns, field.columns) ? (field.mergeWithPrevious ? 1 : .75) : .4 }}
+                title={columnsCompatibleForMerge(prevTableColumns, field.columns) ? undefined : 'Only available when this table has the exact same column names, in order, as the table above it'}
+              >
+                <input
+                  type="checkbox" checked={!!field.mergeWithPrevious}
+                  disabled={!columnsCompatibleForMerge(prevTableColumns, field.columns)}
+                  onChange={e => set('mergeWithPrevious', e.target.checked)}
+                />
+                Merge with table above
+              </label>
+            )}
+          </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, flexWrap: 'wrap', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 8 }}>
             <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11, color: C.muted, fontWeight: 700, textTransform: 'uppercase', letterSpacing: .5 }}>
               Total Marks
               <input
@@ -390,11 +398,6 @@ function FieldRow({ field, index, total, onChange, onMove, onDelete, prevTableCo
               </button>
             </div>
           </div>
-
-          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 7, fontSize: 11, color: C.muted, cursor: 'pointer', marginBottom: 8 }}>
-            <input type="checkbox" disabled={field.layout === 'matrix'} checked={field.layout !== 'matrix' && field.autoSerial !== false} onChange={e => set('autoSerial', e.target.checked)} />
-            Auto-number rows (adds a "Sr. No." column automatically — not listed below)
-          </label>
 
           <div style={{ marginBottom: 6 }}>
             <label style={{ ...lbl, marginBottom: 4 }}>Columns</label>
@@ -513,7 +516,7 @@ function FieldRow({ field, index, total, onChange, onMove, onDelete, prevTableCo
 }
 
 // ── One section, collapsed to a summary row unless it's the open one ────────
-function TablesStep({ draft, selectedPart, onSelectPart, onAddPart, onDeletePart, onMovePart, onChange, onAdd, onDelete, onMove, onPartGuidelineChange }) {
+function TablesStep({ draft, selectedPart, onSelectPart, onAddPart, onDeletePart, onMovePart, onChange, onAdd, onDelete, onMove, onPartGuidelineChange, onRegistrarPartChange, onReviewerOnlyPartChange }) {
   const [partName, setPartName] = useState('');
   const [partError, setPartError] = useState('');
   const parts = draft.parts.length ? draft.parts : ['Part A'];
@@ -578,6 +581,66 @@ function TablesStep({ draft, selectedPart, onSelectPart, onAddPart, onDeletePart
           onChange={e => onPartGuidelineChange(activePart, e.target.value)}
         />
       </label>
+
+      {/* Custom/dynamic forms only — never shown for Standard/Creative (isCore sections),
+          since this flag must not touch their existing review routing. */}
+      {!draft.sections.some(s => s.isCore) && (() => {
+        const isRegistrarPart = !!(draft.registrarParts || {})[activePart];
+        return (
+          <div
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', borderRadius: 10,
+              marginBottom: 14, border: `1px solid ${isRegistrarPart ? `${C.accent}45` : 'var(--c-border)'}`,
+              background: isRegistrarPart ? `${C.accent}0c` : 'var(--c-soft-bg)', transition: 'background .15s, border-color .15s',
+            }}
+            title="This part's review will route only to the Registrar, skipping HOD, Director, Dean and VC — applies only to this dynamic/custom form, never to Standard or Creative.">
+            <div style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: isRegistrarPart ? `${C.accent}20` : 'var(--c-card)', color: isRegistrarPart ? C.accent : C.muted,
+              border: `1px solid ${isRegistrarPart ? `${C.accent}40` : 'var(--c-border)'}`,
+            }}>
+              <I.shield size={15} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Registrar-only part</div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>
+                Bypasses HOD → Director → Dean → VC — <strong style={{ color: C.subtle }}>{activePart}</strong> is reviewed only by the Registrar.
+              </div>
+            </div>
+            <Toggle val={isRegistrarPart} onChange={v => onRegistrarPartChange(activePart, v)} />
+          </div>
+        );
+      })()}
+
+      {/* Custom/dynamic forms only — never shown for Standard/Creative. */}
+      {!draft.sections.some(s => s.isCore) && (() => {
+        const isReviewerOnly = !!(draft.reviewerOnlyParts || {})[activePart];
+        return (
+          <div
+            style={{
+              display: 'flex', alignItems: 'flex-start', gap: 12, padding: '12px 14px', borderRadius: 10,
+              marginBottom: 14, border: `1px solid ${isReviewerOnly ? `${C.accent}45` : 'var(--c-border)'}`,
+              background: isReviewerOnly ? `${C.accent}0c` : 'var(--c-soft-bg)', transition: 'background .15s, border-color .15s',
+            }}
+            title="Faculty won't see an input for this part — it's scored directly by higher authority (HOD/Director/Dean/VC), like Standard Appraisal's reviewer-only Part E. Applies only to this dynamic/custom form, never to Standard or Creative.">
+            <div style={{
+              width: 32, height: 32, borderRadius: 8, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center',
+              background: isReviewerOnly ? `${C.accent}20` : 'var(--c-card)', color: isReviewerOnly ? C.accent : C.muted,
+              border: `1px solid ${isReviewerOnly ? `${C.accent}40` : 'var(--c-border)'}`,
+            }}>
+              <I.users size={15} />
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 700, color: C.text }}>Reviewer-only part <small style={{ fontWeight: 500, color: C.muted }}>(not filled by faculty)</small></div>
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>
+                Faculty don't fill <strong style={{ color: C.subtle }}>{activePart}</strong> themselves — only higher authority
+                (HOD/Director/Dean/VC) enters marks directly, like Standard Appraisal's Part E.
+              </div>
+            </div>
+            <Toggle val={isReviewerOnly} onChange={v => onReviewerOnlyPartChange(activePart, v)} />
+          </div>
+        );
+      })()}
 
       {items.length === 0 && <div className="df-library-empty">No tables in {activePart} yet.</div>}
       <div className="df-part-tables">
@@ -785,7 +848,7 @@ function LiveTable({ field, rows, onRowsChange, onColumnResize, onColumnReorder,
           <tr>
             {matrix && <th scope="col" className="df-matrix-corner">{field.rowHeaderTitle || field.label}</th>}
             {autoSerial && (
-              <th style={{ textAlign: 'left', padding: '7px 10px', background: 'var(--c-soft-bg)', color: C.muted, fontWeight: 700, borderBottom: '1px solid var(--c-border)', width: 46 }}>Sr.</th>
+              <th className="df-serial-cell" style={{ textAlign: 'left', padding: '7px 10px', background: 'var(--c-soft-bg)', color: C.muted, fontWeight: 700, borderBottom: '1px solid var(--c-border)', width: 46 }}>Sr.</th>
             )}
             {field.columns.map((c, i) => {
               const w = widthOf(i, c);
@@ -837,7 +900,7 @@ function LiveTable({ field, rows, onRowsChange, onColumnResize, onColumnReorder,
             <tr key={matrix ? row._matrixRowId : ri}>
               {matrix && <th scope="row" className="df-matrix-row-header">{field.rowHeaders[ri].label}</th>}
               {autoSerial && (
-                <td style={{ padding: '8px 10px', color: C.muted, borderTop: ri > 0 ? '1px solid var(--c-divider)' : 'none' }}>{ri + 1}</td>
+                <td className="df-serial-cell" style={{ padding: '8px 10px', color: C.muted, borderTop: ri > 0 ? '1px solid var(--c-divider)' : 'none' }}>{ri + 1}</td>
               )}
               {field.columns.map((c, ci) => {
                 const w = widthOf(ci, c);
@@ -856,7 +919,7 @@ function LiveTable({ field, rows, onRowsChange, onColumnResize, onColumnReorder,
         </tbody>
       </table>
       {incomplete.length > 0 && <p role="status" style={{ color: C.red, padding: 12, fontSize: 12 }}>Complete rows {incomplete.map(e => e.row).join(', ')} before submitting.</p>}
-      <div style={{ display: 'flex', gap: 8, padding: '8px 10px', borderTop: '1px dashed var(--c-border)' }}>
+      <div className="df-table-toolbar" style={{ display: 'flex', gap: 8, padding: '8px 10px', borderTop: '1px dashed var(--c-border)' }}>
         {!matrix && <button type="button" className="act-btn" onClick={addRow} style={{ ...smBtn, padding: '4px 10px' }}>+ Add Row</button>}
         {!matrix && <button type="button" className="act-btn" onClick={removeLastRow} disabled={list.length <= 1}
           style={{ ...smBtn, padding: '4px 10px', opacity: list.length <= 1 ? .5 : 1, cursor: list.length <= 1 ? 'default' : 'pointer' }}>
@@ -873,7 +936,7 @@ function LiveTable({ field, rows, onRowsChange, onColumnResize, onColumnReorder,
 // repeatable-rows table. Single instance only — no Add/Remove Row here.
 function TransposedTable({ field, values, onChange }) {
   return (
-    <div className="df-live-table" role="region" aria-label={field.label || 'Table preview'} style={{ borderRadius: 8, border: '1px solid var(--c-border)', overflow: 'hidden' }}>
+    <div className="df-live-table df-transposed-table" role="region" aria-label={field.label || 'Table preview'} style={{ borderRadius: 8, border: '1px solid var(--c-border)', overflow: 'hidden' }}>
       {field.columns.map((c, i) => (
         <div key={i} style={{
           display: 'flex', alignItems: 'center', borderTop: i > 0 ? '1px solid var(--c-divider)' : 'none',
@@ -937,7 +1000,7 @@ function PreviewStep({ draft, onColumnResize, onColumnReorder, onColumnAdd }) {
         
       </div>
 
-      <div style={{
+      <div className="df-preview-sheet" style={{
         borderRadius: 8, border: '1px solid var(--c-border)', background: 'var(--c-bg)', overflow: 'hidden',
       }}>
         <div style={{
@@ -964,14 +1027,14 @@ function PreviewStep({ draft, onColumnResize, onColumnReorder, onColumnAdd }) {
         ) : (
           <>
             {/* Page tabs — one per section, so it reads as a paginated form, not one long scroll */}
-            <div style={{
+            <div className="df-preview-tabs" aria-label="Preview parts" style={{
               display: 'flex', gap: 6, overflowX: 'auto', padding: '12px 24px',
               borderBottom: '1px solid var(--c-divider)', background: 'var(--c-soft-bg)',
             }}>
               {visibleSections.map((s, i) => {
                 const active = i === page;
                 return (
-                  <button key={s.id} type="button" className="act-btn" onClick={() => setPage(i)}
+                  <button key={s.id} type="button" className="act-btn" aria-current={active ? 'step' : undefined} onClick={() => setPage(i)}
                     style={{
                       flexShrink: 0, display: 'flex', alignItems: 'center', gap: 6, padding: '6px 12px',
                       borderRadius: 20, cursor: 'pointer', fontSize: 11.5, fontWeight: 700, whiteSpace: 'nowrap',
@@ -991,12 +1054,12 @@ function PreviewStep({ draft, onColumnResize, onColumnReorder, onColumnAdd }) {
               })}
             </div>
 
-            <div style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
+            <div className="df-preview-body" style={{ padding: '22px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ fontSize: 10.5, color: C.muted, fontWeight: 700, letterSpacing: .4, textTransform: 'uppercase' }}>
                 Page {page + 1} of {visibleSections.length}
               </div>
               {(draft.partGuidelines || {})[current?.title]?.trim() && (
-                <div style={{ fontSize: 11.5, color: C.muted, background: 'var(--c-soft-bg)', border: '1px solid var(--c-border)', borderRadius: 8, padding: '9px 12px', whiteSpace: 'pre-wrap' }}>
+                <div className="df-preview-guidelines" style={{ fontSize: 11.5, color: C.muted, background: 'var(--c-soft-bg)', border: '1px solid var(--c-border)', borderRadius: 8, padding: '9px 12px', whiteSpace: 'pre-wrap' }}>
                   {draft.partGuidelines[current.title]}
                 </div>
               )}
@@ -1009,9 +1072,9 @@ function PreviewStep({ draft, onColumnResize, onColumnReorder, onColumnAdd }) {
                   && (f.layout || 'columns') === 'columns' && (prevField.layout || 'columns') === 'columns'
                   && columnsCompatibleForMerge(prevField.columns, f.columns);
                 return (
-                <div key={f.id} style={merged ? { marginTop: -16 } : undefined}>
+                <div className="df-preview-field" key={f.id} style={merged ? { marginTop: -16 } : undefined}>
                   {!merged && (
-                    <label style={lbl}>
+                    <label className="df-preview-table-title" style={lbl}>
                       {f.label || 'Untitled field'} {f.required && <span style={{ color: C.red }}>*</span>}
                       {f.type === 'table' && f.maxMarks != null && (
                         <span style={{ marginLeft: 8, textTransform: 'none', letterSpacing: 0, fontWeight: 600, color: C.accent }}>
@@ -1280,6 +1343,12 @@ export default function DynamicFormPage() {
   function setPartGuideline(part, text) {
     setDraft(d => ({ ...d, partGuidelines: { ...d.partGuidelines, [part]: text } }));
   }
+  function setRegistrarPart(part, checked) {
+    setDraft(d => ({ ...d, registrarParts: { ...d.registrarParts, [part]: checked } }));
+  }
+  function setReviewerOnlyPart(part, checked) {
+    setDraft(d => ({ ...d, reviewerOnlyParts: { ...d.reviewerOnlyParts, [part]: checked } }));
+  }
   function addPart(name) {
     const trimmed = name.trim();
     if (!trimmed || draft.parts.some(p => p.toLowerCase() === trimmed.toLowerCase())) return;
@@ -1307,10 +1376,14 @@ export default function DynamicFormPage() {
     if (!window.confirm(`Delete "${part}"?${bits.length ? ` This will ${bits.join(' and ')}.` : ''}`)) return;
     setDraft(d => {
       const { [part]: _removed, ...partGuidelines } = d.partGuidelines || {};
+      const { [part]: _removedReg, ...registrarParts } = d.registrarParts || {};
+      const { [part]: _removedRev, ...reviewerOnlyParts } = d.reviewerOnlyParts || {};
       return {
         ...d,
         parts: d.parts.filter(p => p !== part),
         partGuidelines,
+        registrarParts,
+        reviewerOnlyParts,
         sections: d.sections
           .filter(s => s.part !== part || s.isCore)
           .map(s => (s.part === part ? { ...s, active: false } : s)),
@@ -1469,7 +1542,7 @@ export default function DynamicFormPage() {
               <div className="df-step-heading"><h3>{STEPS[step].label}</h3><span>Step {step + 1} of {STEPS.length}</span></div>
               <div key={step} className="df-step-panel" style={{ animation: `${dir === 'forward' ? 'slideInRight' : 'slideInLeft'} .2s ease both` }}>
                 {step === 0 && <DetailsStep draft={draft} updateDraft={updateDraft} />}
-                {step === 1 && <TablesStep draft={draft} selectedPart={selectedPart} onSelectPart={setSelectedPart} onAddPart={addPart} onDeletePart={deletePart} onMovePart={movePart} onChange={updateSection} onAdd={addTable} onDelete={deleteTable} onMove={moveTable} onPartGuidelineChange={setPartGuideline} />}
+                {step === 1 && <TablesStep draft={draft} selectedPart={selectedPart} onSelectPart={setSelectedPart} onAddPart={addPart} onDeletePart={deletePart} onMovePart={movePart} onChange={updateSection} onAdd={addTable} onDelete={deleteTable} onMove={moveTable} onPartGuidelineChange={setPartGuideline} onRegistrarPartChange={setRegistrarPart} onReviewerOnlyPartChange={setReviewerOnlyPart} />}
                 {step === 2 && <PreviewStep key={previewNonce} draft={draft} onColumnResize={resizeFieldColumn} onColumnReorder={reorderFieldColumn} onColumnAdd={addPreviewColumn} />}
                 {step === 3 && <PublishStep draft={draft} msg={msg} onSaveDraft={handleSaveDraft} onPublish={handlePublish} onUnpublish={handleUnpublish}
                   onPreview={previewChanges} diffResult={diffResult} diffBusy={diffBusy} diffError={diffError} />}
