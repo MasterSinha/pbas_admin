@@ -42,11 +42,29 @@ export function formsFromSchemas(rows, metadata = {}) {
   return [...grouped].map(([family, records]) => {
     records.sort((a, b) => (a.order ?? 0) - (b.order ?? 0));
     const meta = metadata[family] || {};
+    // part_guideline is a real backend column now (written onto every row that
+    // shares a part) — prefer it over the old browser-only cache; only fall
+    // back to the local cache for a part the backend has no value for yet.
+    const backendPartGuidelines = {};
+    const registrarParts = {};
+    const reviewerOnlyParts = {};
+    for (const r of records) {
+      const g = r.part_guideline ?? r.partGuideline;
+      if (r.part && g) backendPartGuidelines[r.part] = g;
+      if (r.part && (r.registrar_part ?? r.registrarPart)) registrarParts[r.part] = true;
+      if (r.part && (r.reviewer_only_part ?? r.reviewerOnlyPart)) reviewerOnlyParts[r.part] = true;
+    }
     return {
       key: `backend:${family}`, backendFamily: family, backendManaged: true,
       label: meta.label || family, desc: meta.desc || '', color: meta.color || '#3b82f6', iconName: meta.iconName || 'doc',
       parts: [...new Set(records.map(r => r.part))],
-      partGuidelines: meta.partGuidelines || {},
+      partGuidelines: { ...(meta.partGuidelines || {}), ...backendPartGuidelines },
+      // Backend-owned, unlike partGuidelines — no local-cache fallback merge here,
+      // since registrarParts only ever records `true` entries (never explicit
+      // `false`), so merging a stale local `true` in could resurrect a flag the
+      // admin already unchecked and saved as false.
+      registrarParts,
+      reviewerOnlyParts,
       tableOrder: [...new Set(records.flatMap(r => r.tableOrder || r.table_order || []))],
       published: records.some(r => r.active), sections: records.map(r => ({
         id: r.code, backendCode: r.code, sectionKey: r.section_key, storageTable: r.storage_table,
@@ -114,12 +132,18 @@ function buildPlan(form, existing, activate) {
     // even during a bulk Activate, so restoring one still requires the
     // "Restore retired items" checkbox first.
     const active = activate === undefined ? section.active !== false : activate && section.active !== false;
+    // Written onto every table that shares this part — denormalized (same
+    // value repeated across rows) since a Part isn't its own backend row.
+    const partGuideline = form.partGuidelines?.[section.part] || null;
+    const registrarPart = !!form.registrarParts?.[section.part];
+    const reviewerOnlyPart = !!form.reviewerOnlyParts?.[section.part];
     const payload = {
       code, form_family: form.backendFamily, part: section.part,
       section_key: section.sectionKey || code,
       title: (fields.length === 1 ? fields[0].label || section.title : section.title || '').trim(),
       max_marks: section.maxMarks ?? 0, active, order: completed,
-      tableOrder: form.tableOrder || [], fields,
+      tableOrder: form.tableOrder || [], fields, part_guideline: partGuideline,
+      registrar_part: registrarPart, reviewer_only_part: reviewerOnlyPart,
     };
     let kind = 'create';
     if (current) {
@@ -129,6 +153,9 @@ function buildPlan(form, existing, activate) {
         (current.max_marks ?? 0) === payload.max_marks &&
         (current.active !== false) === payload.active &&
         (current.order ?? 0) === payload.order &&
+        (current.part_guideline ?? current.partGuideline ?? null) === payload.part_guideline &&
+        !!(current.registrar_part ?? current.registrarPart) === payload.registrar_part &&
+        !!(current.reviewer_only_part ?? current.reviewerOnlyPart) === payload.reviewer_only_part &&
         stableStringify(current.tableOrder || current.table_order || []) === stableStringify(payload.tableOrder) &&
         stableStringify(current.fields) === stableStringify(fields);
       kind = unchanged ? 'unchanged' : 'update';
@@ -159,6 +186,9 @@ export function createSchemaStore(api) {
         if ((current.max_marks ?? 0) !== payload.max_marks) changes.push(`Total Marks: ${current.max_marks ?? 0} → ${payload.max_marks}`);
         if ((current.active !== false) !== payload.active) changes.push(payload.active ? 'Reactivated' : 'Retired / deactivated');
         if ((current.order ?? 0) !== payload.order) changes.push('Reordered');
+        if ((current.part_guideline ?? current.partGuideline ?? null) !== payload.part_guideline) changes.push('Part guideline changed');
+        if (!!(current.registrar_part ?? current.registrarPart) !== payload.registrar_part) changes.push(payload.registrar_part ? 'Marked Registrar-only' : 'Unmarked Registrar-only');
+        if (!!(current.reviewer_only_part ?? current.reviewerOnlyPart) !== payload.reviewer_only_part) changes.push(payload.reviewer_only_part ? 'Marked reviewer-only (faculty does not fill)' : 'Unmarked reviewer-only');
         if (stableStringify(current.tableOrder || current.table_order || []) !== stableStringify(payload.tableOrder)) changes.push('Column/table sequence changed');
         const oldFields = new Map((current.fields || []).map(f => [f.id || f.key, f]));
         const newFields = new Map(fields.map(f => [f.id || f.key, f]));
@@ -196,7 +226,7 @@ export function createSchemaStore(api) {
         if (entry.kind === 'unchanged') continue;
         if (entry.kind === 'update') {
           await api.updateFields(entry.code, { fields: entry.fields, tableOrder: entry.payload.tableOrder });
-          await api.update(entry.code, { title: entry.payload.title, part: entry.payload.part, max_marks: entry.payload.max_marks, active: entry.payload.active, order: entry.payload.order, tableOrder: entry.payload.tableOrder });
+          await api.update(entry.code, { title: entry.payload.title, part: entry.payload.part, max_marks: entry.payload.max_marks, active: entry.payload.active, order: entry.payload.order, tableOrder: entry.payload.tableOrder, part_guideline: entry.payload.part_guideline, registrar_part: entry.payload.registrar_part, reviewer_only_part: entry.payload.reviewer_only_part });
         } else {
           await api.create(entry.payload);
         }
